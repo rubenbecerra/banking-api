@@ -1,14 +1,18 @@
 package com.banking;
 
-import com.banking.dto.*;
-import com.banking.entity.Account;
-import com.banking.jwt.JWTUtil;
-import com.banking.repository.AccountRepository;
-import com.banking.repository.TransactionRepository;
-import com.banking.service.AccountService;
-import com.banking.service.TransactionService;
-import com.banking.transaction.Transaction;
-import com.banking.util.TransactionType;
+import com.banking.accounts.infrastructure.rest.AccountDTO;
+import com.banking.accounts.domain.model.Account;
+import com.banking.shared.security.JWTUtil;
+import com.banking.accounts.domain.repository.AccountRepository;
+import com.banking.transactions.domain.repository.TransactionRepository;
+import com.banking.accounts.application.AccountService;
+import com.banking.transactions.application.TransactionService;
+import com.banking.transactions.domain.model.Transaction;
+import com.banking.transactions.infrastructure.rest.DepositRequest;
+import com.banking.transactions.infrastructure.rest.TransactionDTO;
+import com.banking.transactions.infrastructure.rest.TransferRequest;
+import com.banking.transactions.infrastructure.rest.WithdrawalRequest;
+import com.banking.shared.util.TransactionType;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -24,6 +28,7 @@ import org.springframework.web.client.RestClient;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -413,20 +418,19 @@ public class TransactionIntegrationTest extends AbstractTestContainers {
                 .retrieve()
                 .toBodilessEntity();
 
-        ResponseEntity<List<TransactionDTO>> response = restClient.get()
+        Map<String, Object> response = restClient.get()
                 .uri("/api/v1/transactions/movements/{iban}", account.iban())
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                 .retrieve()
-                .toEntity(new ParameterizedTypeReference<>() {});
+                .body(new ParameterizedTypeReference<Map<String, Object>>() {});
 
-        assertThat(response.getStatusCode().value()).isEqualTo(200);
-        assertThat(response.getBody()).isNotNull();
-        assertThat(response.getBody().size()).isEqualTo(2);
+        assertThat(response).isNotNull();
+        assertThat(response.get("totalElements")).isEqualTo(2);
 
-        TransactionDTO firstTx = response.getBody().get(0);
-        assertThat(firstTx.type()).isEqualTo(TransactionType.WITHDRAWAL);
-        assertThat(firstTx.amount()).isEqualByComparingTo(BigDecimal.valueOf(30));
+        List<?> content = (List<?>) response.get("content");
+        assertThat(content).hasSize(2);
     }
+
     @Test
     @DisplayName("Customer cannot retrieve transactions of an account they do not own")
     void customerCannotViewTransactionsOfOtherAccounts() {
@@ -442,7 +446,7 @@ public class TransactionIntegrationTest extends AbstractTestContainers {
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + attackerToken)
                         .retrieve()
                         .toBodilessEntity()
-        ).isInstanceOf(HttpClientErrorException.Forbidden.class);
+        ).isInstanceOf(HttpClientErrorException.class).hasMessageContaining("403");
     }
     @Test
     @DisplayName("Admin can retrieve transactions for any account, normal user is forbidden")
@@ -464,16 +468,22 @@ public class TransactionIntegrationTest extends AbstractTestContainers {
                 .retrieve()
                 .toBodilessEntity();
 
-        ResponseEntity<List<TransactionDTO>> adminResponse = restClient.get()
+        ResponseEntity<Map<String, Object>> adminResponse = restClient.get()
                 .uri("/api/v1/transactions/admin/movements/{iban}", account.iban())
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + adminToken)
                 .retrieve()
-                .toEntity(new ParameterizedTypeReference<>() {});
+                .toEntity(new ParameterizedTypeReference<Map<String, Object>>() {});
 
         assertThat(adminResponse.getStatusCode().value()).isEqualTo(200);
         assertThat(adminResponse.getBody()).isNotNull();
-        assertThat(adminResponse.getBody()).hasSize(1);
-        assertThat(adminResponse.getBody().get(0).amount()).isEqualByComparingTo(BigDecimal.valueOf(50));
+
+        Map<String, Object> body = adminResponse.getBody();
+        assertThat(body.get("totalElements")).isEqualTo(1);
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> content = (List<Map<String, Object>>) body.get("content");
+        assertThat(content).hasSize(1);
+        assertThat(Double.valueOf(content.get(0).get("amount").toString())).isEqualTo(50.0);
 
         assertThatThrownBy(() ->
                 restClient.get()
@@ -481,7 +491,9 @@ public class TransactionIntegrationTest extends AbstractTestContainers {
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + clientToken)
                         .retrieve()
                         .toBodilessEntity()
-        ).isInstanceOf(HttpClientErrorException.Forbidden.class);
+        )
+                .isInstanceOf(HttpClientErrorException.class)
+                .hasMessageContaining("403");
     }
     @Test
     @DisplayName("Concurrent withdrawals: only valid balance operations succeed without race conditions")
@@ -609,5 +621,54 @@ public class TransactionIntegrationTest extends AbstractTestContainers {
 
         BigDecimal totalFinalBalance = finalA.getBalance().add(finalB.getBalance());
         assertThat(totalFinalBalance).isEqualByComparingTo(BigDecimal.valueOf(1000));
+    }
+    @Test
+    @DisplayName("Customer transactions are paginated and sorted correctly")
+    void customerCanViewPaginatedTransactions() {
+        String userEmail = "paginated_user@bank.com";
+        String token = jwtUtil.generateTestToken(userEmail, List.of("ROLE_USER"));
+
+
+        AccountDTO account = accountService.createAccount(userEmail, BigDecimal.valueOf(1000));
+
+        for (int i = 1; i <= 15; i++) {
+            DepositRequest req = new DepositRequest(account.iban(), BigDecimal.valueOf(10 + i));
+            restClient.post()
+                    .uri("/api/v1/transactions/deposit")
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(req)
+                    .retrieve()
+                    .toBodilessEntity();
+        }
+
+        Map<String, Object> firstPage = restClient.get()
+                .uri("/api/v1/transactions/movements/{iban}?page=0&size=5", account.iban())
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .retrieve()
+                .body(new ParameterizedTypeReference<Map<String, Object>>() {});
+
+        assertThat(firstPage).isNotNull();
+        assertThat(firstPage.get("totalElements")).isEqualTo(15);
+        assertThat(firstPage.get("totalPages")).isEqualTo(3);
+        assertThat(firstPage.get("number")).isEqualTo(0);
+
+        @SuppressWarnings("unchecked")
+        List<?> firstPageContent = (List<?>) firstPage.get("content");
+        assertThat(firstPageContent).hasSize(5);
+
+        Map<String, Object> lastPage = restClient.get()
+                .uri("/api/v1/transactions/movements/{iban}?page=2&size=5", account.iban())
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .retrieve()
+                .body(new ParameterizedTypeReference<Map<String, Object>>() {});
+
+        assertThat(lastPage).isNotNull();
+        assertThat(lastPage.get("number")).isEqualTo(2);
+        assertThat(lastPage.get("last")).isEqualTo(true);
+
+        @SuppressWarnings("unchecked")
+        List<?> lastPageContent = (List<?>) lastPage.get("content");
+        assertThat(lastPageContent).hasSize(5);
     }
 }

@@ -1,10 +1,10 @@
 package com.banking;
 
-import com.banking.dto.AccountDTO;
-import com.banking.dto.AdminAccountCreationRequest;
-import com.banking.jwt.JWTUtil;
-import com.banking.repository.AccountRepository;
-import com.banking.service.AccountService;
+import com.banking.accounts.infrastructure.rest.AccountDTO;
+import com.banking.accounts.infrastructure.rest.AdminAccountCreationRequest;
+import com.banking.shared.security.JWTUtil;
+import com.banking.accounts.domain.repository.AccountRepository;
+import com.banking.accounts.application.AccountService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
