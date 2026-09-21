@@ -1,6 +1,6 @@
 package com.banking.transactions.infrastructure.rest;
 
-import com.banking.shared.util.TransactionType;
+import com.banking.transactions.domain.model.TransactionType;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 

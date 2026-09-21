@@ -1,5 +1,6 @@
 package com.banking.transactions.application;
 
+import com.banking.accounts.domain.exception.AccountNotFoundException;
 import com.banking.transactions.infrastructure.rest.DepositRequest;
 import com.banking.transactions.infrastructure.rest.TransactionDTO;
 import com.banking.transactions.infrastructure.rest.TransferRequest;
@@ -8,7 +9,7 @@ import com.banking.accounts.domain.model.Account;
 import com.banking.accounts.domain.repository.AccountRepository;
 import com.banking.transactions.domain.repository.TransactionRepository;
 import com.banking.transactions.domain.model.Transaction;
-import com.banking.shared.util.TransactionType;
+import com.banking.transactions.domain.model.TransactionType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.access.AccessDeniedException;
@@ -66,12 +67,14 @@ public class TransactionService {
                 request.amount(),
                 TransactionType.TRANSFER
         );
+        accountRepository.save(target);
+        accountRepository.save(source);
         Transaction saved = transactionRepository.save(transaction);
         return mapToDTO(saved);
     }
     public TransactionDTO deposit(DepositRequest request, String ownerEmail) {
         Account target = accountRepository.findByIbanWithLock(request.targetIban())
-                .orElseThrow(() -> new NoSuchElementException("Target account cannot be found"));
+                .orElseThrow(() -> new AccountNotFoundException("Target account cannot be found"));
         if (!target.getOwner().equals(ownerEmail)) {
             throw new AccessDeniedException("You can only deposit money into your own accounts");
         }
@@ -81,17 +84,19 @@ public class TransactionService {
                 target.getIban(),
                 request.amount()
         );
+        accountRepository.save(target);
         Transaction saved = transactionRepository.save(transaction);
         return mapToDTO(saved);
     }
     public TransactionDTO adminDeposit(DepositRequest request) {
         Account target = accountRepository.findByIbanWithLock(request.targetIban())
-                .orElseThrow(() -> new NoSuchElementException("Target account cannot be found"));
+                .orElseThrow(() -> new AccountNotFoundException("Target account cannot be found"));
         target.setBalance(target.getBalance().add(request.amount()));
         Transaction transaction = Transaction.createDeposit(
                 target.getIban(),
                 request.amount()
         );
+        accountRepository.save(target);
         Transaction saved = transactionRepository.save(transaction);
         return mapToDTO(saved);
     }
@@ -111,6 +116,7 @@ public class TransactionService {
                 source.getIban(),
                 request.amount()
         );
+        accountRepository.save(source);
         Transaction saved = transactionRepository.save(transaction);
 
         return mapToDTO(saved);
@@ -128,6 +134,7 @@ public class TransactionService {
                 source.getIban(),
                 request.amount()
         );
+        accountRepository.save(source);
         Transaction saved = transactionRepository.save(transaction);
 
         return mapToDTO(saved);

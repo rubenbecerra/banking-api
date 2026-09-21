@@ -1,18 +1,18 @@
 package com.banking;
 
-import com.banking.accounts.infrastructure.rest.AccountDTO;
 import com.banking.accounts.domain.model.Account;
+import com.banking.accounts.application.usecase.CreateAccountPort;
+import com.banking.accounts.infrastructure.persistence.SpringDataAccountRepository;
 import com.banking.shared.security.JWTUtil;
 import com.banking.accounts.domain.repository.AccountRepository;
 import com.banking.transactions.domain.repository.TransactionRepository;
-import com.banking.accounts.application.AccountService;
 import com.banking.transactions.application.TransactionService;
 import com.banking.transactions.domain.model.Transaction;
 import com.banking.transactions.infrastructure.rest.DepositRequest;
 import com.banking.transactions.infrastructure.rest.TransactionDTO;
 import com.banking.transactions.infrastructure.rest.TransferRequest;
 import com.banking.transactions.infrastructure.rest.WithdrawalRequest;
-import com.banking.shared.util.TransactionType;
+import com.banking.transactions.domain.model.TransactionType;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -46,12 +46,17 @@ public class TransactionIntegrationTest extends AbstractTestContainers {
     private int port;
 
     @Autowired
+    private SpringDataAccountRepository springDataAccountRepository;
+
+    @Autowired
     private AccountRepository accountRepository;
+
     @Autowired
     private TransactionRepository transactionRepository;
 
     @Autowired
-    private AccountService accountService;
+    private CreateAccountPort createAccountPort;
+
     @Autowired
     private TransactionService transactionService;
 
@@ -66,18 +71,18 @@ public class TransactionIntegrationTest extends AbstractTestContainers {
                 .baseUrl("http://localhost:" + port)
                 .build();
 
-        accountRepository.deleteAll();
+        springDataAccountRepository.deleteAll();
         transactionRepository.deleteAll();
     }
 
     @Test
-    @DisplayName("Must  deposit valid amounts")
+    @DisplayName("Must deposit valid amounts")
     void customerCanDepositValidAmount() {
         String ownerEmail = "customer@gmail.com";
         String token = jwtUtil.generateTestToken(ownerEmail, List.of("ROLE_USER"));
-        AccountDTO account = accountService.createAccount(ownerEmail, BigDecimal.valueOf(100));
+        Account account = createAccountPort.execute(ownerEmail, BigDecimal.valueOf(100));
 
-        DepositRequest depositRequest = new DepositRequest(account.iban(), BigDecimal.valueOf(50));
+        DepositRequest depositRequest = new DepositRequest(account.getIban(), BigDecimal.valueOf(50));
 
         ResponseEntity<TransactionDTO> response = restClient.post()
                 .uri("/api/v1/transactions/deposit")
@@ -88,11 +93,11 @@ public class TransactionIntegrationTest extends AbstractTestContainers {
 
         assertThat(response.getStatusCode().value()).isEqualTo(201);
         assertThat(response.getBody()).isNotNull();
-        assertThat(response.getBody().targetIban()).isEqualTo(account.iban());
+        assertThat(response.getBody().targetIban()).isEqualTo(account.getIban());
         assertThat(response.getBody().amount()).isEqualByComparingTo(BigDecimal.valueOf(50));
         assertThat(response.getBody().type()).isEqualTo(TransactionType.DEPOSIT);
 
-        Account updatedAccount = accountRepository.findByIban(account.iban()).orElseThrow();
+        Account updatedAccount = accountRepository.findByIban(account.getIban()).orElseThrow();
         assertThat(updatedAccount.getBalance()).isEqualByComparingTo(BigDecimal.valueOf(150));
     }
 
@@ -101,9 +106,9 @@ public class TransactionIntegrationTest extends AbstractTestContainers {
     void customerCannotDepositInvalidAmount() {
         String ownerEmail = "customer@gmail.com";
         String token = jwtUtil.generateTestToken(ownerEmail, List.of("ROLE_USER"));
-        AccountDTO account = accountService.createAccount(ownerEmail, BigDecimal.valueOf(100));
+        Account account = createAccountPort.execute(ownerEmail, BigDecimal.valueOf(100));
 
-        DepositRequest depositRequest = new DepositRequest(account.iban(), BigDecimal.valueOf(-50));
+        DepositRequest depositRequest = new DepositRequest(account.getIban(), BigDecimal.valueOf(-50));
 
         assertThatThrownBy(() ->
                 restClient.post()
@@ -116,8 +121,8 @@ public class TransactionIntegrationTest extends AbstractTestContainers {
         )
                 .isInstanceOf(HttpClientErrorException.BadRequest.class);
 
-        Account updatedAccount = accountRepository.findByIban(account.iban())
-                        .orElseThrow(() -> new NoSuchElementException("Cannot found the account"));
+        Account updatedAccount = accountRepository.findByIban(account.getIban())
+                .orElseThrow(() -> new NoSuchElementException("Cannot found the account"));
         assertThat(updatedAccount.getBalance()).isEqualByComparingTo(BigDecimal.valueOf(100));
     }
 
@@ -126,9 +131,9 @@ public class TransactionIntegrationTest extends AbstractTestContainers {
     void customerCannotWithdrawInvalidAmount() {
         String ownerEmail = "customer@gmail.com";
         String token = jwtUtil.generateTestToken(ownerEmail, List.of("ROLE_USER"));
-        AccountDTO account = accountService.createAccount(ownerEmail, BigDecimal.valueOf(100));
+        Account account = createAccountPort.execute(ownerEmail, BigDecimal.valueOf(100));
 
-        WithdrawalRequest withdrawalRequest = new WithdrawalRequest(account.iban(), BigDecimal.valueOf(-50));
+        WithdrawalRequest withdrawalRequest = new WithdrawalRequest(account.getIban(), BigDecimal.valueOf(-50));
 
         assertThatThrownBy(() ->
                 restClient.post()
@@ -141,20 +146,21 @@ public class TransactionIntegrationTest extends AbstractTestContainers {
         )
                 .isInstanceOf(HttpClientErrorException.BadRequest.class);
 
-        Account updatedAccount = accountRepository.findByIban(account.iban())
+        Account updatedAccount = accountRepository.findByIban(account.getIban())
                 .orElseThrow(() -> new NoSuchElementException("Cannot find the account"));
         assertThat(updatedAccount.getBalance()).isEqualByComparingTo(BigDecimal.valueOf(100));
 
         assertThat(transactionRepository.count()).isZero();
     }
+
     @Test
     @DisplayName("Must reject withdrawal when balance is insufficient")
     void customerCannotWithdrawMoreThanCurrentBalance() {
         String ownerEmail = "customer@gmail.com";
         String token = jwtUtil.generateTestToken(ownerEmail, List.of("ROLE_USER"));
-        AccountDTO account = accountService.createAccount(ownerEmail, BigDecimal.valueOf(100));
+        Account account = createAccountPort.execute(ownerEmail, BigDecimal.valueOf(100));
 
-        WithdrawalRequest withdrawalRequest = new WithdrawalRequest(account.iban(), BigDecimal.valueOf(150));
+        WithdrawalRequest withdrawalRequest = new WithdrawalRequest(account.getIban(), BigDecimal.valueOf(150));
 
         assertThatThrownBy(() ->
                 restClient.post()
@@ -167,18 +173,19 @@ public class TransactionIntegrationTest extends AbstractTestContainers {
         )
                 .isInstanceOf(HttpClientErrorException.BadRequest.class);
 
-        Account updatedAccount = accountRepository.findByIban(account.iban())
+        Account updatedAccount = accountRepository.findByIban(account.getIban())
                 .orElseThrow(() -> new NoSuchElementException("Cannot find the account"));
         assertThat(updatedAccount.getBalance()).isEqualByComparingTo(BigDecimal.valueOf(100));
     }
+
     @Test
     @DisplayName("Must withdraw a valid amount")
     void customerCanWithdrawValidAmounts() {
         String ownerEmail = "customer@gmail.com";
         String token = jwtUtil.generateTestToken(ownerEmail, List.of("ROLE_USER"));
-        AccountDTO account = accountService.createAccount(ownerEmail, BigDecimal.valueOf(100));
+        Account account = createAccountPort.execute(ownerEmail, BigDecimal.valueOf(100));
 
-        WithdrawalRequest withdrawalRequest = new WithdrawalRequest(account.iban(), BigDecimal.valueOf(50));
+        WithdrawalRequest withdrawalRequest = new WithdrawalRequest(account.getIban(), BigDecimal.valueOf(50));
 
         ResponseEntity<TransactionDTO> response = restClient.post()
                 .uri("/api/v1/transactions/withdraw")
@@ -190,7 +197,7 @@ public class TransactionIntegrationTest extends AbstractTestContainers {
 
         assertThat(response.getBody()).isNotNull();
         assertThat(response.getBody().id()).isNotNull();
-        assertThat(response.getBody().sourceIban()).isEqualTo(account.iban());
+        assertThat(response.getBody().sourceIban()).isEqualTo(account.getIban());
         assertThat(response.getBody().targetIban()).isNull();
         assertThat(response.getBody().type()).isEqualTo(TransactionType.WITHDRAWAL);
         assertThat(response.getBody().timestamp()).isNotNull();
@@ -199,11 +206,12 @@ public class TransactionIntegrationTest extends AbstractTestContainers {
         assertThat(transactions).hasSize(1);
 
         Transaction savedTx = transactions.getFirst();
-        assertThat(savedTx.getSourceIban()).isEqualTo(account.iban());
+        assertThat(savedTx.getSourceIban()).isEqualTo(account.getIban());
         assertThat(savedTx.getTargetIban()).isNull();
         assertThat(savedTx.getAmount()).isEqualByComparingTo(BigDecimal.valueOf(50));
         assertThat(savedTx.getType()).isEqualTo(TransactionType.WITHDRAWAL);
     }
+
     @Test
     @DisplayName("Customer can transfer money to another account successfully")
     void customerCanTransferMoneySuccessfully() {
@@ -211,12 +219,12 @@ public class TransactionIntegrationTest extends AbstractTestContainers {
         String receiverEmail = "receiver@gmail.com";
         String token = jwtUtil.generateTestToken(senderEmail, List.of("ROLE_USER"));
 
-        AccountDTO sourceAccount = accountService.createAccount(senderEmail, BigDecimal.valueOf(100));
-        AccountDTO targetAccount = accountService.createAccount(receiverEmail, BigDecimal.valueOf(50));
+        Account sourceAccount = createAccountPort.execute(senderEmail, BigDecimal.valueOf(100));
+        Account targetAccount = createAccountPort.execute(receiverEmail, BigDecimal.valueOf(50));
 
         TransferRequest transferRequest = new TransferRequest(
-                sourceAccount.iban(),
-                targetAccount.iban(),
+                sourceAccount.getIban(),
+                targetAccount.getIban(),
                 BigDecimal.valueOf(40)
         );
 
@@ -230,13 +238,13 @@ public class TransactionIntegrationTest extends AbstractTestContainers {
 
         assertThat(response.getStatusCode().value()).isEqualTo(201);
         assertThat(response.getBody()).isNotNull();
-        assertThat(response.getBody().sourceIban()).isEqualTo(sourceAccount.iban());
-        assertThat(response.getBody().targetIban()).isEqualTo(targetAccount.iban());
+        assertThat(response.getBody().sourceIban()).isEqualTo(sourceAccount.getIban());
+        assertThat(response.getBody().targetIban()).isEqualTo(targetAccount.getIban());
         assertThat(response.getBody().amount()).isEqualByComparingTo(BigDecimal.valueOf(40));
         assertThat(response.getBody().type()).isEqualTo(TransactionType.TRANSFER);
 
-        Account updatedSource = accountRepository.findByIban(sourceAccount.iban()).orElseThrow();
-        Account updatedTarget = accountRepository.findByIban(targetAccount.iban()).orElseThrow();
+        Account updatedSource = accountRepository.findByIban(sourceAccount.getIban()).orElseThrow();
+        Account updatedTarget = accountRepository.findByIban(targetAccount.getIban()).orElseThrow();
         assertThat(updatedSource.getBalance()).isEqualByComparingTo(BigDecimal.valueOf(60));
         assertThat(updatedTarget.getBalance()).isEqualByComparingTo(BigDecimal.valueOf(90));
 
@@ -244,18 +252,19 @@ public class TransactionIntegrationTest extends AbstractTestContainers {
         assertThat(transactions.size()).isEqualTo(1);
         assertThat(transactions.getFirst().getType()).isEqualTo(TransactionType.TRANSFER);
     }
+
     @Test
     @DisplayName("Must reject transfer when amount is negative or zero")
     void customerCannotTransferInvalidAmount() {
         String senderEmail = "sender@gmail.com";
         String token = jwtUtil.generateTestToken(senderEmail, List.of("ROLE_USER"));
 
-        AccountDTO sourceAccount = accountService.createAccount(senderEmail, BigDecimal.valueOf(100));
-        AccountDTO targetAccount = accountService.createAccount("receiver@gmail.com", BigDecimal.valueOf(50));
+        Account sourceAccount = createAccountPort.execute(senderEmail, BigDecimal.valueOf(100));
+        Account targetAccount = createAccountPort.execute("receiver@gmail.com", BigDecimal.valueOf(50));
 
         TransferRequest transferRequest = new TransferRequest(
-                sourceAccount.iban(),
-                targetAccount.iban(),
+                sourceAccount.getIban(),
+                targetAccount.getIban(),
                 BigDecimal.valueOf(-10)
         );
 
@@ -269,22 +278,23 @@ public class TransactionIntegrationTest extends AbstractTestContainers {
                         .toBodilessEntity()
         ).isInstanceOf(HttpClientErrorException.BadRequest.class);
 
-        Account updatedSource = accountRepository.findByIban(sourceAccount.iban()).orElseThrow();
+        Account updatedSource = accountRepository.findByIban(sourceAccount.getIban()).orElseThrow();
         assertThat(updatedSource.getBalance()).isEqualByComparingTo(BigDecimal.valueOf(100));
         assertThat(transactionRepository.count()).isZero();
     }
+
     @Test
     @DisplayName("Must reject transfer when sender has insufficient balance")
     void customerCannotTransferWithInsufficientBalance() {
         String senderEmail = "sender@gmail.com";
         String token = jwtUtil.generateTestToken(senderEmail, List.of("ROLE_USER"));
 
-        AccountDTO sourceAccount = accountService.createAccount(senderEmail, BigDecimal.valueOf(30));
-        AccountDTO targetAccount = accountService.createAccount("receiver@gmail.com", BigDecimal.valueOf(50));
+        Account sourceAccount = createAccountPort.execute(senderEmail, BigDecimal.valueOf(30));
+        Account targetAccount = createAccountPort.execute("receiver@gmail.com", BigDecimal.valueOf(50));
 
         TransferRequest transferRequest = new TransferRequest(
-                sourceAccount.iban(),
-                targetAccount.iban(),
+                sourceAccount.getIban(),
+                targetAccount.getIban(),
                 BigDecimal.valueOf(100)
         );
 
@@ -298,23 +308,24 @@ public class TransactionIntegrationTest extends AbstractTestContainers {
                         .toBodilessEntity()
         ).isInstanceOf(HttpClientErrorException.BadRequest.class);
 
-        Account updatedSource = accountRepository.findByIban(sourceAccount.iban()).orElseThrow();
-        Account updatedTarget = accountRepository.findByIban(targetAccount.iban()).orElseThrow();
+        Account updatedSource = accountRepository.findByIban(sourceAccount.getIban()).orElseThrow();
+        Account updatedTarget = accountRepository.findByIban(targetAccount.getIban()).orElseThrow();
         assertThat(updatedSource.getBalance()).isEqualByComparingTo(BigDecimal.valueOf(30));
         assertThat(updatedTarget.getBalance()).isEqualByComparingTo(BigDecimal.valueOf(50));
         assertThat(transactionRepository.count()).isZero();
     }
+
     @Test
     @DisplayName("Must reject transfer to the same source account")
     void customerCannotTransferToSameAccount() {
         String senderEmail = "sender@gmail.com";
         String token = jwtUtil.generateTestToken(senderEmail, List.of("ROLE_USER"));
 
-        AccountDTO account = accountService.createAccount(senderEmail, BigDecimal.valueOf(100));
+        Account account = createAccountPort.execute(senderEmail, BigDecimal.valueOf(100));
 
         TransferRequest transferRequest = new TransferRequest(
-                account.iban(),
-                account.iban(),
+                account.getIban(),
+                account.getIban(),
                 BigDecimal.valueOf(20)
         );
 
@@ -330,16 +341,17 @@ public class TransactionIntegrationTest extends AbstractTestContainers {
 
         assertThat(transactionRepository.count()).isZero();
     }
+
     @Test
     @DisplayName("Admin must deposit in any account")
     void adminCanDepositValidAmount() {
         String ownerEmail = "customer@gmail.com";
-        AccountDTO account = accountService.createAccount(ownerEmail, BigDecimal.valueOf(100));
+        Account account = createAccountPort.execute(ownerEmail, BigDecimal.valueOf(100));
 
         String adminEmail = "admin@gmail.com";
         String token = jwtUtil.generateTestToken(adminEmail,List.of("ROLE_ADMIN"));
 
-        DepositRequest depositRequest = new DepositRequest(account.iban(), BigDecimal.valueOf(50));
+        DepositRequest depositRequest = new DepositRequest(account.getIban(), BigDecimal.valueOf(50));
 
         ResponseEntity<TransactionDTO> response = restClient.post()
                 .uri("/api/v1/transactions/admin/deposit")
@@ -350,23 +362,24 @@ public class TransactionIntegrationTest extends AbstractTestContainers {
 
         assertThat(response.getStatusCode().value()).isEqualTo(201);
         assertThat(response.getBody()).isNotNull();
-        assertThat(response.getBody().targetIban()).isEqualTo(account.iban());
+        assertThat(response.getBody().targetIban()).isEqualTo(account.getIban());
         assertThat(response.getBody().amount()).isEqualByComparingTo(BigDecimal.valueOf(50));
         assertThat(response.getBody().type()).isEqualTo(TransactionType.DEPOSIT);
 
-        Account updatedAccount = accountRepository.findByIban(account.iban()).orElseThrow();
+        Account updatedAccount = accountRepository.findByIban(account.getIban()).orElseThrow();
         assertThat(updatedAccount.getBalance()).isEqualByComparingTo(BigDecimal.valueOf(150));
     }
+
     @Test
     @DisplayName("Admin must withdraw a valid amount in any account")
     void adminCanWithdrawValidAmounts() {
         String ownerEmail = "customer@gmail.com";
-        AccountDTO account = accountService.createAccount(ownerEmail, BigDecimal.valueOf(100));
+        Account account = createAccountPort.execute(ownerEmail, BigDecimal.valueOf(100));
 
         String adminEmail = "admin@gmail.com";
         String token = jwtUtil.generateTestToken(adminEmail, List.of("ROLE_ADMIN"));
 
-        WithdrawalRequest withdrawalRequest = new WithdrawalRequest(account.iban(), BigDecimal.valueOf(50));
+        WithdrawalRequest withdrawalRequest = new WithdrawalRequest(account.getIban(), BigDecimal.valueOf(50));
 
         ResponseEntity<TransactionDTO> response = restClient.post()
                 .uri("/api/v1/transactions/admin/withdraw")
@@ -378,7 +391,7 @@ public class TransactionIntegrationTest extends AbstractTestContainers {
 
         assertThat(response.getBody()).isNotNull();
         assertThat(response.getBody().id()).isNotNull();
-        assertThat(response.getBody().sourceIban()).isEqualTo(account.iban());
+        assertThat(response.getBody().sourceIban()).isEqualTo(account.getIban());
         assertThat(response.getBody().targetIban()).isNull();
         assertThat(response.getBody().type()).isEqualTo(TransactionType.WITHDRAWAL);
         assertThat(response.getBody().timestamp()).isNotNull();
@@ -387,20 +400,21 @@ public class TransactionIntegrationTest extends AbstractTestContainers {
         assertThat(transactions).hasSize(1);
 
         Transaction savedTx = transactions.getFirst();
-        assertThat(savedTx.getSourceIban()).isEqualTo(account.iban());
+        assertThat(savedTx.getSourceIban()).isEqualTo(account.getIban());
         assertThat(savedTx.getTargetIban()).isNull();
         assertThat(savedTx.getAmount()).isEqualByComparingTo(BigDecimal.valueOf(50));
         assertThat(savedTx.getType()).isEqualTo(TransactionType.WITHDRAWAL);
     }
+
     @Test
     @DisplayName("Customer can retrieve transaction history for their own account")
     void customerCanRetrieveOwnTransactions() {
         String ownerEmail = "owner@gmail.com";
         String token = jwtUtil.generateTestToken(ownerEmail, List.of("ROLE_USER"));
 
-        AccountDTO account = accountService.createAccount(ownerEmail, BigDecimal.valueOf(100));
+        Account account = createAccountPort.execute(ownerEmail, BigDecimal.valueOf(100));
 
-        DepositRequest depositRequest = new DepositRequest(account.iban(), BigDecimal.valueOf(50));
+        DepositRequest depositRequest = new DepositRequest(account.getIban(), BigDecimal.valueOf(50));
         restClient.post()
                 .uri("/api/v1/transactions/deposit")
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
@@ -409,7 +423,7 @@ public class TransactionIntegrationTest extends AbstractTestContainers {
                 .retrieve()
                 .toBodilessEntity();
 
-        WithdrawalRequest withdrawalRequest = new WithdrawalRequest(account.iban(), BigDecimal.valueOf(30));
+        WithdrawalRequest withdrawalRequest = new WithdrawalRequest(account.getIban(), BigDecimal.valueOf(30));
         restClient.post()
                 .uri("/api/v1/transactions/withdraw")
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
@@ -419,7 +433,7 @@ public class TransactionIntegrationTest extends AbstractTestContainers {
                 .toBodilessEntity();
 
         Map<String, Object> response = restClient.get()
-                .uri("/api/v1/transactions/movements/{iban}", account.iban())
+                .uri("/api/v1/transactions/movements/{iban}", account.getIban())
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                 .retrieve()
                 .body(new ParameterizedTypeReference<Map<String, Object>>() {});
@@ -438,16 +452,17 @@ public class TransactionIntegrationTest extends AbstractTestContainers {
         String attackerEmail = "attacker@gmail.com";
         String attackerToken = jwtUtil.generateTestToken(attackerEmail, List.of("ROLE_USER"));
 
-        AccountDTO account = accountService.createAccount(legitOwner, BigDecimal.valueOf(100));
+        Account account = createAccountPort.execute(legitOwner, BigDecimal.valueOf(100));
 
         assertThatThrownBy(() ->
                 restClient.get()
-                        .uri("/api/v1/transactions/movements/{iban}", account.iban())
+                        .uri("/api/v1/transactions/movements/{iban}", account.getIban())
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + attackerToken)
                         .retrieve()
                         .toBodilessEntity()
         ).isInstanceOf(HttpClientErrorException.class).hasMessageContaining("403");
     }
+
     @Test
     @DisplayName("Admin can retrieve transactions for any account, normal user is forbidden")
     void adminCanRetrieveAnyAccountTransactions() {
@@ -457,9 +472,9 @@ public class TransactionIntegrationTest extends AbstractTestContainers {
         String clientToken = jwtUtil.generateTestToken(clientEmail, List.of("ROLE_USER"));
         String adminToken = jwtUtil.generateTestToken(adminEmail, List.of("ROLE_ADMIN"));
 
-        AccountDTO account = accountService.createAccount(clientEmail, BigDecimal.valueOf(200));
+        Account account = createAccountPort.execute(clientEmail, BigDecimal.valueOf(200));
 
-        DepositRequest depositRequest = new DepositRequest(account.iban(), BigDecimal.valueOf(50));
+        DepositRequest depositRequest = new DepositRequest(account.getIban(), BigDecimal.valueOf(50));
         restClient.post()
                 .uri("/api/v1/transactions/deposit")
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + clientToken)
@@ -469,7 +484,7 @@ public class TransactionIntegrationTest extends AbstractTestContainers {
                 .toBodilessEntity();
 
         ResponseEntity<Map<String, Object>> adminResponse = restClient.get()
-                .uri("/api/v1/transactions/admin/movements/{iban}", account.iban())
+                .uri("/api/v1/transactions/admin/movements/{iban}", account.getIban())
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + adminToken)
                 .retrieve()
                 .toEntity(new ParameterizedTypeReference<Map<String, Object>>() {});
@@ -487,7 +502,7 @@ public class TransactionIntegrationTest extends AbstractTestContainers {
 
         assertThatThrownBy(() ->
                 restClient.get()
-                        .uri("/api/v1/transactions/admin/movements/{iban}", account.iban())
+                        .uri("/api/v1/transactions/admin/movements/{iban}", account.getIban())
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + clientToken)
                         .retrieve()
                         .toBodilessEntity()
@@ -495,13 +510,14 @@ public class TransactionIntegrationTest extends AbstractTestContainers {
                 .isInstanceOf(HttpClientErrorException.class)
                 .hasMessageContaining("403");
     }
+
     @Test
     @DisplayName("Concurrent withdrawals: only valid balance operations succeed without race conditions")
     void concurrentWithdrawalsSafetyTest() throws InterruptedException {
         String ownerEmail = "concurrent_withdraw@bank.com";
         String token = jwtUtil.generateTestToken(ownerEmail, List.of("ROLE_USER"));
 
-        AccountDTO account = accountService.createAccount(ownerEmail, BigDecimal.valueOf(100));
+        Account account = createAccountPort.execute(ownerEmail, BigDecimal.valueOf(100));
 
         int totalThreads = 10;
         BigDecimal withdrawAmount = BigDecimal.valueOf(20);
@@ -520,7 +536,7 @@ public class TransactionIntegrationTest extends AbstractTestContainers {
                 try {
                     startLatch.await();
 
-                    WithdrawalRequest request = new WithdrawalRequest(account.iban(), withdrawAmount);
+                    WithdrawalRequest request = new WithdrawalRequest(account.getIban(), withdrawAmount);
                     restClient.post()
                             .uri("/api/v1/transactions/withdraw")
                             .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
@@ -546,9 +562,10 @@ public class TransactionIntegrationTest extends AbstractTestContainers {
         assertThat(successfulTransactions.get()).isEqualTo(5);
         assertThat(failedTransactions.get()).isEqualTo(5);
 
-        Account updatedAccount = accountRepository.findByIban(account.iban()).orElseThrow();
+        Account updatedAccount = accountRepository.findByIban(account.getIban()).orElseThrow();
         assertThat(updatedAccount.getBalance()).isEqualByComparingTo(BigDecimal.ZERO);
     }
+
     @Test
     @DisplayName("Concurrent bidirectional transfers: no deadlocks and total balance remains consistent")
     void concurrentBidirectionalTransfersSafetyTest() throws InterruptedException {
@@ -558,8 +575,8 @@ public class TransactionIntegrationTest extends AbstractTestContainers {
         String tokenA = jwtUtil.generateTestToken(userA, List.of("ROLE_USER"));
         String tokenB = jwtUtil.generateTestToken(userB, List.of("ROLE_USER"));
 
-        AccountDTO accountA = accountService.createAccount(userA, BigDecimal.valueOf(500));
-        AccountDTO accountB = accountService.createAccount(userB, BigDecimal.valueOf(500));
+        Account accountA = createAccountPort.execute(userA, BigDecimal.valueOf(500));
+        Account accountB = createAccountPort.execute(userB, BigDecimal.valueOf(500));
 
         int transfersPerDirection = 10;
         int totalThreads = transfersPerDirection * 2;
@@ -576,7 +593,7 @@ public class TransactionIntegrationTest extends AbstractTestContainers {
                 readyLatch.countDown();
                 try {
                     startLatch.await();
-                    TransferRequest request = new TransferRequest(accountA.iban(), accountB.iban(), amount);
+                    TransferRequest request = new TransferRequest(accountA.getIban(), accountB.getIban(), amount);
                     restClient.post()
                             .uri("/api/v1/transactions/transfer")
                             .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenA)
@@ -596,7 +613,7 @@ public class TransactionIntegrationTest extends AbstractTestContainers {
                 readyLatch.countDown();
                 try {
                     startLatch.await();
-                    TransferRequest request = new TransferRequest(accountB.iban(), accountA.iban(), amount);
+                    TransferRequest request = new TransferRequest(accountB.getIban(), accountA.getIban(), amount);
                     restClient.post()
                             .uri("/api/v1/transactions/transfer")
                             .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenB)
@@ -616,12 +633,13 @@ public class TransactionIntegrationTest extends AbstractTestContainers {
         doneLatch.await();
         executor.shutdown();
 
-        Account finalA = accountRepository.findByIban(accountA.iban()).orElseThrow();
-        Account finalB = accountRepository.findByIban(accountB.iban()).orElseThrow();
+        Account finalA = accountRepository.findByIban(accountA.getIban()).orElseThrow();
+        Account finalB = accountRepository.findByIban(accountB.getIban()).orElseThrow();
 
         BigDecimal totalFinalBalance = finalA.getBalance().add(finalB.getBalance());
         assertThat(totalFinalBalance).isEqualByComparingTo(BigDecimal.valueOf(1000));
     }
+
     @Test
     @DisplayName("Customer transactions are paginated and sorted correctly")
     void customerCanViewPaginatedTransactions() {
@@ -629,10 +647,10 @@ public class TransactionIntegrationTest extends AbstractTestContainers {
         String token = jwtUtil.generateTestToken(userEmail, List.of("ROLE_USER"));
 
 
-        AccountDTO account = accountService.createAccount(userEmail, BigDecimal.valueOf(1000));
+        Account account = createAccountPort.execute(userEmail, BigDecimal.valueOf(1000));
 
         for (int i = 1; i <= 15; i++) {
-            DepositRequest req = new DepositRequest(account.iban(), BigDecimal.valueOf(10 + i));
+            DepositRequest req = new DepositRequest(account.getIban(), BigDecimal.valueOf(10 + i));
             restClient.post()
                     .uri("/api/v1/transactions/deposit")
                     .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
@@ -643,7 +661,7 @@ public class TransactionIntegrationTest extends AbstractTestContainers {
         }
 
         Map<String, Object> firstPage = restClient.get()
-                .uri("/api/v1/transactions/movements/{iban}?page=0&size=5", account.iban())
+                .uri("/api/v1/transactions/movements/{iban}?page=0&size=5", account.getIban())
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                 .retrieve()
                 .body(new ParameterizedTypeReference<Map<String, Object>>() {});
@@ -658,7 +676,7 @@ public class TransactionIntegrationTest extends AbstractTestContainers {
         assertThat(firstPageContent).hasSize(5);
 
         Map<String, Object> lastPage = restClient.get()
-                .uri("/api/v1/transactions/movements/{iban}?page=2&size=5", account.iban())
+                .uri("/api/v1/transactions/movements/{iban}?page=2&size=5", account.getIban())
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                 .retrieve()
                 .body(new ParameterizedTypeReference<Map<String, Object>>() {});

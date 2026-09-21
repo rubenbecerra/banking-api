@@ -1,22 +1,25 @@
 package com.banking.accounts.domain.model;
 
-import jakarta.persistence.*;
-
 import java.math.BigDecimal;
 import java.util.Objects;
 
-@Entity
-@Table(name = "accounts")
+
 public class Account {
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
     private String iban;
     private BigDecimal balance;
     private String owner;
 
-    public Account () {}
+    public Account() {}
+
     public Account(String iban, BigDecimal balance, String owner) {
+        this.iban = iban;
+        this.balance = balance;
+        this.owner = owner;
+    }
+
+    public Account(Long id, String iban, BigDecimal balance, String owner) {
+        this.id = id;
         this.iban = iban;
         this.balance = balance;
         this.owner = owner;

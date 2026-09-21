@@ -1,10 +1,12 @@
 package com.banking;
 
+import com.banking.accounts.application.usecase.CreateAccountPort;
+import com.banking.accounts.application.usecase.GetAccountsPort;
+import com.banking.accounts.domain.model.Account;
 import com.banking.accounts.infrastructure.rest.AccountDTO;
 import com.banking.accounts.infrastructure.rest.AdminAccountCreationRequest;
 import com.banking.shared.security.JWTUtil;
 import com.banking.accounts.domain.repository.AccountRepository;
-import com.banking.accounts.application.AccountService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -31,10 +33,12 @@ public class AccountIntegrationTest extends AbstractTestContainers {
     private AccountRepository accountRepository;
 
     @Autowired
-    private AccountService accountService;
+    private CreateAccountPort createAccountPort;
+
+    @Autowired
+    private GetAccountsPort getAccountsPort;
 
     private RestClient restClient;
-
 
     @Autowired
     private JWTUtil jwtUtil;
@@ -73,7 +77,6 @@ public class AccountIntegrationTest extends AbstractTestContainers {
         assertThat(response.getBody().owner()).isEqualTo(email);
         assertThat(response.getBody().iban()).startsWith("ES");
         assertThat(response.getBody().balance()).isEqualByComparingTo("0.0");
-
     }
 
     @Test
@@ -111,18 +114,15 @@ public class AccountIntegrationTest extends AbstractTestContainers {
         String ownerEmail = "test@gmail.com";
         String token = jwtUtil.generateTestToken(ownerEmail, List.of("ROLE_USER"));
 
-
-
         HttpHeaders header = new HttpHeaders();
         header.setBearerAuth(token);
         header.setContentType(MediaType.APPLICATION_JSON);
 
         String otherEmail = "otheruser@gmail.com";
 
-        accountService.createAccount(ownerEmail, BigDecimal.valueOf(100));
-        accountService.createAccount(ownerEmail, BigDecimal.valueOf(250));
-        accountService.createAccount(otherEmail, BigDecimal.valueOf(500));
-
+        createAccountPort.execute(ownerEmail, BigDecimal.valueOf(100));
+        createAccountPort.execute(ownerEmail, BigDecimal.valueOf(250));
+        createAccountPort.execute(otherEmail, BigDecimal.valueOf(500));
 
         ResponseEntity<List<AccountDTO>> response = restClient.get()
                 .uri("/api/v1/accounts/me")
@@ -151,11 +151,11 @@ public class AccountIntegrationTest extends AbstractTestContainers {
         String otherEmail = "otheruser@gmail.com";
         String anotherEmail = "anotheruser@gmail.com";
 
-        accountService.createAccount(adminEmail, BigDecimal.valueOf(100));
-        accountService.createAccount(adminEmail, BigDecimal.valueOf(250));
-        accountService.createAccount(otherEmail, BigDecimal.valueOf(500));
-        accountService.createAccount(otherEmail, BigDecimal.valueOf(800));
-        accountService.createAccount(anotherEmail, BigDecimal.valueOf(500));
+        createAccountPort.execute(adminEmail, BigDecimal.valueOf(100));
+        createAccountPort.execute(adminEmail, BigDecimal.valueOf(250));
+        createAccountPort.execute(otherEmail, BigDecimal.valueOf(500));
+        createAccountPort.execute(otherEmail, BigDecimal.valueOf(800));
+        createAccountPort.execute(anotherEmail, BigDecimal.valueOf(500));
 
         ResponseEntity<List<AccountDTO>> response = restClient.get()
                 .uri("/api/v1/accounts/admin")
@@ -178,57 +178,57 @@ public class AccountIntegrationTest extends AbstractTestContainers {
         String otherEmail = "other@gmail.com";
         String token = jwtUtil.generateTestToken(ownerEmail, List.of("ROLE_USER"));
 
-        AccountDTO accountToDelete = accountService.createAccount(ownerEmail, BigDecimal.valueOf(100));
-        AccountDTO accountToKeep = accountService.createAccount(ownerEmail, BigDecimal.valueOf(250));
-        AccountDTO otherAccount = accountService.createAccount(otherEmail, BigDecimal.valueOf(500));
+        Account accountToDelete = createAccountPort.execute(ownerEmail, BigDecimal.valueOf(100));
+        Account accountToKeep = createAccountPort.execute(ownerEmail, BigDecimal.valueOf(250));
+        Account otherAccount = createAccountPort.execute(otherEmail, BigDecimal.valueOf(500));
 
         ResponseEntity<Void> response = restClient.delete()
-                .uri("/api/v1/accounts/{iban}", accountToDelete.iban())
+                .uri("/api/v1/accounts/{iban}", accountToDelete.getIban())
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                 .retrieve()
                 .toBodilessEntity();
 
         assertThat(response.getStatusCode().value()).isEqualTo(204);
 
-        List<AccountDTO> remainingAccounts = accountService.getAccountsByOwner(ownerEmail);
+        List<Account> remainingAccounts = getAccountsPort.getByOwner(ownerEmail);
         assertThat(remainingAccounts)
                 .hasSize(1)
-                .extracting(AccountDTO::iban)
-                .containsExactly(accountToKeep.iban())
-                .doesNotContain(accountToDelete.iban());
+                .extracting(Account::getIban)
+                .containsExactly(accountToKeep.getIban())
+                .doesNotContain(accountToDelete.getIban());
 
-        List<AccountDTO> otherUserAccounts = accountService.getAccountsByOwner(otherEmail);
+        List<Account> otherUserAccounts = getAccountsPort.getByOwner(otherEmail);
         assertThat(otherUserAccounts).hasSize(1);
     }
 
     @Test
-    @DisplayName("Customer can delete their own account by IBAN")
+    @DisplayName("Admin can delete accounts by IBAN")
     void adminCanDeleteAccounts() {
         String adminEmail = "admin@gmail.com";
         String otherEmail = "other@gmail.com";
         String anotherEmail = "another@gmail.com";
         String token = jwtUtil.generateTestToken(adminEmail, List.of("ROLE_ADMIN"));
 
-        AccountDTO accountToDelete = accountService.createAccount(otherEmail, BigDecimal.valueOf(100));
-        AccountDTO otherAccount = accountService.createAccount(anotherEmail, BigDecimal.valueOf(250));
-        AccountDTO accountToKeep = accountService.createAccount(otherEmail, BigDecimal.valueOf(500));
+        Account accountToDelete = createAccountPort.execute(otherEmail, BigDecimal.valueOf(100));
+        Account otherAccount = createAccountPort.execute(anotherEmail, BigDecimal.valueOf(250));
+        Account accountToKeep = createAccountPort.execute(otherEmail, BigDecimal.valueOf(500));
 
         ResponseEntity<Void> response = restClient.delete()
-                .uri("/api/v1/accounts/admin/{iban}", accountToDelete.iban())
+                .uri("/api/v1/accounts/admin/{iban}", accountToDelete.getIban())
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                 .retrieve()
                 .toBodilessEntity();
 
         assertThat(response.getStatusCode().value()).isEqualTo(204);
 
-        List<AccountDTO> remainingAccounts = accountService.getAccountsByOwner(otherEmail);
+        List<Account> remainingAccounts = getAccountsPort.getByOwner(otherEmail);
         assertThat(remainingAccounts)
                 .hasSize(1)
-                .extracting(AccountDTO::iban)
-                .containsExactly(accountToKeep.iban())
-                .doesNotContain(accountToDelete.iban());
+                .extracting(Account::getIban)
+                .containsExactly(accountToKeep.getIban())
+                .doesNotContain(accountToDelete.getIban());
 
-        List<AccountDTO> otherUserAccounts = accountService.getAccountsByOwner(otherEmail);
+        List<Account> otherUserAccounts = getAccountsPort.getByOwner(otherEmail);
         assertThat(otherUserAccounts).hasSize(1);
     }
 }

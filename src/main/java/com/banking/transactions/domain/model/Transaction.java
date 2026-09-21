@@ -1,6 +1,5 @@
 package com.banking.transactions.domain.model;
 
-import com.banking.shared.util.TransactionType;
 import jakarta.persistence.*;
 
 import java.math.BigDecimal;
