@@ -1,7 +1,7 @@
 package com.banking.shared.exceptions;
 
-import com.banking.accounts.domain.exception.AccountNotFoundException;
-import com.banking.accounts.domain.exception.UnauthorizedActionException;
+import com.banking.shared.exceptions.exception.AccountNotFoundException;
+import com.banking.shared.exceptions.exception.UnauthorizedActionException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
@@ -71,6 +71,7 @@ public class GlobalExceptionHandler {
         );
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(body);
     }
+
 
     private Map<String, Object> buildErrorResponse(int status, String error, Object message) {
         Map<String, Object> response = new HashMap<>();

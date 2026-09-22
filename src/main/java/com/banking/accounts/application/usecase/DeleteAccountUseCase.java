@@ -1,7 +1,7 @@
 package com.banking.accounts.application.usecase;
 
-import com.banking.accounts.domain.exception.AccountNotFoundException;
-import com.banking.accounts.domain.exception.UnauthorizedActionException;
+import com.banking.shared.exceptions.exception.AccountNotFoundException;
+import com.banking.shared.exceptions.exception.UnauthorizedActionException;
 import com.banking.accounts.domain.model.Account;
 import com.banking.accounts.domain.repository.AccountRepository;
 

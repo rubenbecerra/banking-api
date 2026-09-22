@@ -1,41 +1,34 @@
 package com.banking.transactions.domain.model;
 
-import jakarta.persistence.*;
-
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
-@Entity
-@Table(name = "transactions")
 public class Transaction {
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+
     private Long id;
-
-    @Column(name = "source_iban")
     private String sourceIban;
-
-    @Column(name = "target_iban")
     private String targetIban;
-
-    @Column(nullable = false, precision = 15, scale = 2)
     private BigDecimal amount;
-
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
     private TransactionType type;
-
-    @Column(nullable = false, updatable = false)
     private LocalDateTime timestamp;
 
     public Transaction() {}
 
-    public Transaction(String sourceIban, String targetIban,BigDecimal amount, TransactionType type) {
+    public Transaction(String sourceIban, String targetIban, BigDecimal amount, TransactionType type) {
         this.sourceIban = sourceIban;
         this.targetIban = targetIban;
         this.amount = amount;
         this.type = type;
         this.timestamp = LocalDateTime.now();
+    }
+
+    public Transaction(Long id, String sourceIban, String targetIban, BigDecimal amount, TransactionType type, LocalDateTime timestamp) {
+        this.id = id;
+        this.sourceIban = sourceIban;
+        this.targetIban = targetIban;
+        this.amount = amount;
+        this.type = type;
+        this.timestamp = timestamp;
     }
 
     public static Transaction createTransfer(String sourceIban, String targetIban, BigDecimal amount) {
@@ -73,5 +66,4 @@ public class Transaction {
     public LocalDateTime getTimestamp() {
         return timestamp;
     }
-
 }

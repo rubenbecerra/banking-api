@@ -1,4 +1,4 @@
-package com.banking.accounts.domain.exception;
+package com.banking.shared.exceptions.exception;
 
 public class AccountNotFoundException extends RuntimeException {
     public AccountNotFoundException(String message) { super(message); }

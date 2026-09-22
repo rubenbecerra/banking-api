@@ -5,9 +5,8 @@ import com.banking.accounts.application.usecase.CreateAccountPort;
 import com.banking.accounts.infrastructure.persistence.SpringDataAccountRepository;
 import com.banking.shared.security.JWTUtil;
 import com.banking.accounts.domain.repository.AccountRepository;
-import com.banking.transactions.domain.repository.TransactionRepository;
-import com.banking.transactions.application.TransactionService;
 import com.banking.transactions.domain.model.Transaction;
+import com.banking.transactions.domain.repository.TransactionRepository;
 import com.banking.transactions.infrastructure.rest.DepositRequest;
 import com.banking.transactions.infrastructure.rest.TransactionDTO;
 import com.banking.transactions.infrastructure.rest.TransferRequest;
@@ -56,9 +55,6 @@ public class TransactionIntegrationTest extends AbstractTestContainers {
 
     @Autowired
     private CreateAccountPort createAccountPort;
-
-    @Autowired
-    private TransactionService transactionService;
 
     private RestClient restClient;
 

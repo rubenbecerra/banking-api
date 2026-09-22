@@ -1,15 +1,20 @@
 package com.banking.transactions.domain.repository;
 
+import com.banking.transactions.domain.model.PageQuery;
+import com.banking.transactions.domain.model.PageResult;
 import com.banking.transactions.domain.model.Transaction;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.jpa.repository.JpaRepository;
+
+import java.util.List;
 
 
-public interface TransactionRepository extends JpaRepository<Transaction, Long> {
-    Page<Transaction> findBySourceIbanOrTargetIbanOrderByTimestampDesc(
+public interface TransactionRepository {
+    PageResult<Transaction> findBySourceIbanOrTargetIban(
             String sourceIban,
             String targetIban,
-            Pageable pageable
+            PageQuery pageQuery
     );
+    Transaction save(Transaction transaction);
+    void deleteAll();
+    List<Transaction> findAll();
+    long count();
 }
