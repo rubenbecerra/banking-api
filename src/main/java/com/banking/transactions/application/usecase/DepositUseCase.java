@@ -20,7 +20,7 @@ public class DepositUseCase implements DepositPort {
     }
 
     @Override
-    public Transaction deposit(String targetIban, BigDecimal amount, String ownerEmail) {
+    public OperationResult<Transaction> deposit(String targetIban, BigDecimal amount, String ownerEmail) {
         Account target = accountRepository.findByIbanWithLock(targetIban)
                 .orElseThrow(() -> new AccountNotFoundException("Target account cannot be found"));
         if (!target.getOwner().equals(ownerEmail)) {
@@ -33,11 +33,13 @@ public class DepositUseCase implements DepositPort {
                 amount
         );
         accountRepository.save(target);
-        return transactionRepository.save(transaction);
+        Transaction savedTransaction = transactionRepository.save(transaction);
+
+        return OperationResult.fresh(savedTransaction);
     }
 
     @Override
-    public Transaction adminDeposit(String targetIban, BigDecimal amount) {
+    public OperationResult<Transaction> adminDeposit(String targetIban, BigDecimal amount) {
         Account target = accountRepository.findByIbanWithLock(targetIban)
                 .orElseThrow(() -> new AccountNotFoundException("Target account cannot be found"));
         target.setBalance(target.getBalance().add(amount));
@@ -46,6 +48,8 @@ public class DepositUseCase implements DepositPort {
                 amount
         );
         accountRepository.save(target);
-        return transactionRepository.save(transaction);
+        Transaction savedTransaction = transactionRepository.save(transaction);
+
+        return OperationResult.fresh(savedTransaction);
     }
 }

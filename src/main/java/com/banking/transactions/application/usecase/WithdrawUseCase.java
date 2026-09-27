@@ -20,7 +20,7 @@ public class WithdrawUseCase implements WithdrawPort {
     }
 
     @Override
-    public Transaction withdraw(String ownerEmail, String sourceIban, BigDecimal amount) {
+    public OperationResult<Transaction> withdraw(String ownerEmail, String sourceIban, BigDecimal amount) {
         Account source = accountRepository.findByIbanWithLock(sourceIban)
                 .orElseThrow(() -> new NoSuchElementException("Source account cannot be found"));
         if (!source.getOwner().equals(ownerEmail)) {
@@ -37,11 +37,12 @@ public class WithdrawUseCase implements WithdrawPort {
         );
         accountRepository.save(source);
 
-        return transactionRepository.save(transaction);
+        Transaction savedTransaction = transactionRepository.save(transaction);
+        return OperationResult.fresh(savedTransaction);
     }
 
     @Override
-    public Transaction adminWithdraw(String sourceIban, BigDecimal amount) {
+    public OperationResult<Transaction> adminWithdraw(String sourceIban, BigDecimal amount) {
         Account source = accountRepository.findByIbanWithLock(sourceIban)
                 .orElseThrow(() -> new NoSuchElementException("Source account cannot be found"));
 
@@ -55,7 +56,8 @@ public class WithdrawUseCase implements WithdrawPort {
                 amount
         );
         accountRepository.save(source);
+        Transaction savedTransaction = transactionRepository.save(transaction);
 
-        return transactionRepository.save(transaction);
+        return OperationResult.fresh(savedTransaction);
     }
 }

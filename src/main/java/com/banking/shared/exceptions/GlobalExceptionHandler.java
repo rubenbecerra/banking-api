@@ -2,6 +2,7 @@ package com.banking.shared.exceptions;
 
 import com.banking.shared.exceptions.exception.AccountNotFoundException;
 import com.banking.shared.exceptions.exception.UnauthorizedActionException;
+import jakarta.persistence.PessimisticLockException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
@@ -64,6 +65,9 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Map<String, Object>> handleGlobalException(Exception ex) {
+        System.err.println("=== 500 ERROR ===");
+        ex.printStackTrace();
+
         Map<String, Object> body = buildErrorResponse(
                 HttpStatus.INTERNAL_SERVER_ERROR.value(),
                 "Internal Server Error",

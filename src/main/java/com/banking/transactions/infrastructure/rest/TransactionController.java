@@ -1,9 +1,6 @@
 package com.banking.transactions.infrastructure.rest;
 
-import com.banking.transactions.application.usecase.DepositPort;
-import com.banking.transactions.application.usecase.GetTransactionsPort;
-import com.banking.transactions.application.usecase.TransferMoneyPort;
-import com.banking.transactions.application.usecase.WithdrawPort;
+import com.banking.transactions.application.usecase.*;
 import com.banking.transactions.domain.model.PageResult;
 import com.banking.transactions.domain.model.Transaction;
 import jakarta.validation.Valid;
@@ -36,48 +33,79 @@ public class TransactionController {
         this.getTransactionsPort = getTransactionsPort;
         this.transferMoneyPort= transferMoneyPort;
         this.withdrawPort = withdrawPort;
-
     }
 
     @PostMapping("/deposit")
     public ResponseEntity<TransactionDTO> deposit(@Valid @RequestBody DepositRequest request,
                                                   Authentication authentication) {
-        String ownerEmail = authentication.getName();
-        Transaction transaction = depositPort.deposit(request.targetIban(),request.amount(),ownerEmail);
 
-        TransactionDTO result = restMapper.toDTO(transaction);
-        return ResponseEntity.status(HttpStatus.CREATED).body(result);
+        String ownerEmail = authentication.getName();
+
+        OperationResult<Transaction> operationResult = depositPort.deposit(
+                request.targetIban(),
+                request.amount(),
+                ownerEmail
+        );
+
+        TransactionDTO result = restMapper.toDTO(operationResult.data());
+
+        HttpStatus status = operationResult.isCacheHit() ? HttpStatus.OK : HttpStatus.CREATED;
+
+        return ResponseEntity.status(status).body(result);
     }
     @PostMapping("/admin/deposit")
     public ResponseEntity<TransactionDTO> adminDeposit(@Valid @RequestBody DepositRequest request) {
-        Transaction transaction = depositPort.adminDeposit(request.targetIban(), request.amount());
-        TransactionDTO result = restMapper.toDTO(transaction);
-        return ResponseEntity.status(HttpStatus.CREATED).body(result);
+
+        OperationResult<Transaction> operationResult = depositPort.adminDeposit(
+                request.targetIban(),
+                request.amount()
+        );
+
+        TransactionDTO result = restMapper.toDTO(operationResult.data());
+
+        HttpStatus status = operationResult.isCacheHit() ? HttpStatus.OK : HttpStatus.CREATED;
+
+        return ResponseEntity.status(status).body(result);
     }
 
     @PostMapping("/withdraw")
     public ResponseEntity<TransactionDTO> withdraw(@Valid @RequestBody WithdrawalRequest request,
                                                    Authentication authentication) {
         String ownerEmail = authentication.getName();
-        Transaction transaction = withdrawPort.withdraw(ownerEmail,request.sourceIban(), request.amount());
-        TransactionDTO result = restMapper.toDTO(transaction);
-        return ResponseEntity.status(HttpStatus.CREATED).body(result);
+        OperationResult<Transaction> operationResult = withdrawPort.withdraw(ownerEmail,request.sourceIban(), request.amount());
+        TransactionDTO result = restMapper.toDTO(operationResult.data());
+
+        HttpStatus status = operationResult.isCacheHit() ? HttpStatus.OK : HttpStatus.CREATED;
+
+        return ResponseEntity.status(status).body(result);
     }
     @PostMapping("/admin/withdraw")
     public ResponseEntity<TransactionDTO> adminWithdraw(@Valid @RequestBody WithdrawalRequest request) {
-        Transaction transaction = withdrawPort.adminWithdraw(request.sourceIban(), request.amount());
-        TransactionDTO result = restMapper.toDTO(transaction);
-        return ResponseEntity.status(HttpStatus.CREATED).body(result);
+
+        OperationResult<Transaction> operationResult = withdrawPort.adminWithdraw(
+                request.sourceIban(),
+                request.amount()
+        );
+
+        TransactionDTO result = restMapper.toDTO(operationResult.data());
+
+        HttpStatus status = operationResult.isCacheHit() ? HttpStatus.OK : HttpStatus.CREATED;
+
+        return ResponseEntity.status(status).body(result);
     }
 
     @PostMapping("/transfer")
     public ResponseEntity<TransactionDTO> transfer(@Valid @RequestBody TransferRequest request,
                                                    Authentication authentication) {
         String ownerEmail = authentication.getName();
-        Transaction transaction = transferMoneyPort.transferMoney(ownerEmail,
+        OperationResult<Transaction> operationResult = transferMoneyPort.transferMoney(ownerEmail,
                 request.sourceIban(), request.targetIban(), request.amount());
-        TransactionDTO result = restMapper.toDTO(transaction);
-        return ResponseEntity.status(HttpStatus.CREATED).body(result);
+
+        TransactionDTO result = restMapper.toDTO(operationResult.data());
+
+        HttpStatus status = operationResult.isCacheHit() ? HttpStatus.OK : HttpStatus.CREATED;
+
+        return ResponseEntity.status(status).body(result);
     }
 
     @GetMapping("/movements/{iban}")

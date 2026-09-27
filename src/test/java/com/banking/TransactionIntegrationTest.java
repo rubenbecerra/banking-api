@@ -20,9 +20,11 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.HttpServerErrorException;
 import org.springframework.web.client.RestClient;
 
 import java.math.BigDecimal;
@@ -685,4 +687,126 @@ public class TransactionIntegrationTest extends AbstractTestContainers {
         List<?> lastPageContent = (List<?>) lastPage.get("content");
         assertThat(lastPageContent).hasSize(5);
     }
+
+    @Test
+    @DisplayName("Must return the exact same transaction and prevent balance duplication on idempotent retry")
+    void customerCanRetryDepositIdempotently() {
+        String ownerEmail = "idempotent_user@gmail.com";
+        String token = jwtUtil.generateTestToken(ownerEmail, List.of("ROLE_USER"));
+        Account account = createAccountPort.execute(ownerEmail, BigDecimal.valueOf(100));
+
+        DepositRequest depositRequest = new DepositRequest(account.getIban(), BigDecimal.valueOf(50));
+        String idempotencyKey = java.util.UUID.randomUUID().toString();
+
+        ResponseEntity<TransactionDTO> firstResponse;
+        try {
+            firstResponse = restClient.post()
+                    .uri("/api/v1/transactions/deposit")
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                    .header("X-Idempotency-Key", idempotencyKey)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(depositRequest)
+                    .retrieve()
+                    .toEntity(TransactionDTO.class);
+        } catch (HttpClientErrorException | HttpServerErrorException e) {
+            System.err.println("=== ERROR: " + e.getResponseBodyAsString());
+            throw e;
+        }
+
+        assertThat(firstResponse.getStatusCode().value()).isEqualTo(201);
+        assertThat(firstResponse.getBody()).isNotNull();
+        Long firstTransactionId = firstResponse.getBody().id();
+
+        ResponseEntity<TransactionDTO> secondResponse = restClient.post()
+                .uri("/api/v1/transactions/deposit")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .header("X-Idempotency-Key", idempotencyKey)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(depositRequest)
+                .retrieve()
+                .toEntity(TransactionDTO.class);
+
+        assertThat(secondResponse.getStatusCode().value()).isEqualTo(200);
+        assertThat(secondResponse.getBody()).isNotNull();
+        assertThat(secondResponse.getBody().id()).isEqualTo(firstTransactionId);
+
+        Account updatedAccount = accountRepository.findByIban(account.getIban()).orElseThrow();
+        assertThat(updatedAccount.getBalance()).isEqualByComparingTo(BigDecimal.valueOf(150));
+
+        assertThat(transactionRepository.findAll()).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("Must return 201 on first withdrawal and 200 on idempotent retry")
+    void testWithdrawIdempotency() {
+        String ownerEmail = "customer@gmail.com";
+        String token = jwtUtil.generateTestToken(ownerEmail, List.of("ROLE_USER"));
+        Account account = createAccountPort.execute(ownerEmail, BigDecimal.valueOf(100));
+
+        WithdrawalRequest withdrawRequest = new WithdrawalRequest(account.getIban(), BigDecimal.valueOf(40));
+        String idempotencyKey = "test-withdraw-key-123";
+
+        ResponseEntity<Void> firstResponse = restClient.post()
+                .uri("/api/v1/transactions/withdraw")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .header("X-Idempotency-Key", idempotencyKey)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(withdrawRequest)
+                .retrieve()
+                .toBodilessEntity();
+
+        assertThat(firstResponse.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+
+        ResponseEntity<Void> secondResponse = restClient.post()
+                .uri("/api/v1/transactions/withdraw")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .header("X-Idempotency-Key", idempotencyKey)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(withdrawRequest)
+                .retrieve()
+                .toBodilessEntity();
+
+        assertThat(secondResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
+    }
+
+    @Test
+    @DisplayName("Must return 201 on first transfer and 200 on idempotent retry")
+    void testTransferIdempotency() {
+        String ownerEmail = "customer@gmail.com";
+        String token = jwtUtil.generateTestToken(ownerEmail, List.of("ROLE_USER"));
+
+        Account sourceAccount = createAccountPort.execute(ownerEmail, BigDecimal.valueOf(200));
+        Account targetAccount = createAccountPort.execute("other@gmail.com", BigDecimal.valueOf(50));
+
+        TransferRequest transferRequest = new TransferRequest(
+                sourceAccount.getIban(),
+                targetAccount.getIban(),
+                BigDecimal.valueOf(50)
+        );
+        String idempotencyKey = "test-transfer-key-456";
+
+        ResponseEntity<Void> firstResponse = restClient.post()
+                .uri("/api/v1/transactions/transfer")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .header("X-Idempotency-Key", idempotencyKey)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(transferRequest)
+                .retrieve()
+                .toBodilessEntity();
+
+        assertThat(firstResponse.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+
+        ResponseEntity<Void> secondResponse = restClient.post()
+                .uri("/api/v1/transactions/transfer")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .header("X-Idempotency-Key", idempotencyKey)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(transferRequest)
+                .retrieve()
+                .toBodilessEntity();
+
+        assertThat(secondResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
+    }
+
+
 }

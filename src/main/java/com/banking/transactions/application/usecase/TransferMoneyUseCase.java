@@ -21,7 +21,10 @@ public class TransferMoneyUseCase implements TransferMoneyPort {
     }
 
     @Override
-    public Transaction transferMoney(String ownerEmail, String sourceIban, String targetIban, BigDecimal amount) {
+    public OperationResult<Transaction> transferMoney(String ownerEmail,
+                                                      String sourceIban,
+                                                      String targetIban,
+                                                      BigDecimal amount) {
         if (sourceIban.equals(targetIban)) {
             throw new IllegalArgumentException("Source and target IBAN cannot be the same");
         }
@@ -61,7 +64,7 @@ public class TransferMoneyUseCase implements TransferMoneyPort {
 
         accountRepository.save(target);
         accountRepository.save(source);
-
-        return transactionRepository.save(transaction);
+        Transaction savedTransaction = transactionRepository.save(transaction);
+        return OperationResult.fresh(savedTransaction);
     }
 }

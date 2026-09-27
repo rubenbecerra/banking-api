@@ -1,4 +1,4 @@
-package com.banking.transactions.application.decorator;
+package com.banking.transactions.application.decorator.transactional;
 
 import com.banking.transactions.application.usecase.GetTransactionsPort;
 import com.banking.transactions.domain.model.PageResult;
