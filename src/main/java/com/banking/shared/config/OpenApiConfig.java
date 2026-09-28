@@ -18,8 +18,8 @@ public class OpenApiConfig {
     public OpenAPI customOpenAPI() {
         return new OpenAPI()
                 .info(new Info()
-                        .title("Banking Management API")
-                        .description("Microservice Banking system")
+                        .title("Banking & Identity Management API")
+                        .description("Production-grade Fintech system combining IAM (Customers/Auth) and Core Banking (Accounts/Transactions) with JWT security and Redis idempotency.")
                         .version("1.0.0")
                         .contact(new Contact()
                                 .name("Backend Team")

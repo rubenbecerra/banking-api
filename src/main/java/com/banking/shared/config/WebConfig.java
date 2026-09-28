@@ -1,4 +1,4 @@
-package com.banking.shared.infrastructure.web;
+package com.banking.shared.config;
 
 import com.banking.shared.security.IdempotencyInterceptor;
 import org.springframework.context.annotation.Configuration;

@@ -1,5 +1,7 @@
-package com.banking;
+package com.banking.transactions;
 
+import com.banking.AbstractTestContainers;
+import com.banking.Main;
 import com.banking.accounts.domain.model.Account;
 import com.banking.accounts.application.usecase.CreateAccountPort;
 import com.banking.accounts.infrastructure.persistence.SpringDataAccountRepository;
@@ -84,7 +86,7 @@ public class TransactionIntegrationTest extends AbstractTestContainers {
 
         ResponseEntity<TransactionDTO> response = restClient.post()
                 .uri("/api/v1/transactions/deposit")
-                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .header(HttpHeaders.COOKIE, "accessToken=" + token)
                 .contentType(MediaType.APPLICATION_JSON)
                 .body(depositRequest)
                 .retrieve().toEntity(TransactionDTO.class);
@@ -111,7 +113,7 @@ public class TransactionIntegrationTest extends AbstractTestContainers {
         assertThatThrownBy(() ->
                 restClient.post()
                         .uri("/api/v1/transactions/deposit")
-                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                        .header(HttpHeaders.COOKIE, "accessToken=" + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .body(depositRequest)
                         .retrieve()
@@ -136,7 +138,7 @@ public class TransactionIntegrationTest extends AbstractTestContainers {
         assertThatThrownBy(() ->
                 restClient.post()
                         .uri("/api/v1/transactions/withdraw")
-                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                        .header(HttpHeaders.COOKIE, "accessToken=" + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .body(withdrawalRequest)
                         .retrieve()
@@ -163,7 +165,7 @@ public class TransactionIntegrationTest extends AbstractTestContainers {
         assertThatThrownBy(() ->
                 restClient.post()
                         .uri("/api/v1/transactions/withdraw")
-                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                        .header(HttpHeaders.COOKIE, "accessToken=" + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .body(withdrawalRequest)
                         .retrieve()
@@ -187,7 +189,7 @@ public class TransactionIntegrationTest extends AbstractTestContainers {
 
         ResponseEntity<TransactionDTO> response = restClient.post()
                 .uri("/api/v1/transactions/withdraw")
-                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .header(HttpHeaders.COOKIE, "accessToken=" + token)
                 .contentType(MediaType.APPLICATION_JSON)
                 .body(withdrawalRequest)
                 .retrieve()
@@ -228,7 +230,7 @@ public class TransactionIntegrationTest extends AbstractTestContainers {
 
         ResponseEntity<TransactionDTO> response = restClient.post()
                 .uri("/api/v1/transactions/transfer")
-                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .header(HttpHeaders.COOKIE, "accessToken=" + token)
                 .contentType(MediaType.APPLICATION_JSON)
                 .body(transferRequest)
                 .retrieve()
@@ -269,7 +271,7 @@ public class TransactionIntegrationTest extends AbstractTestContainers {
         assertThatThrownBy(() ->
                 restClient.post()
                         .uri("/api/v1/transactions/transfer")
-                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                        .header(HttpHeaders.COOKIE, "accessToken=" + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .body(transferRequest)
                         .retrieve()
@@ -299,7 +301,7 @@ public class TransactionIntegrationTest extends AbstractTestContainers {
         assertThatThrownBy(() ->
                 restClient.post()
                         .uri("/api/v1/transactions/transfer")
-                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                        .header(HttpHeaders.COOKIE, "accessToken=" + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .body(transferRequest)
                         .retrieve()
@@ -330,7 +332,7 @@ public class TransactionIntegrationTest extends AbstractTestContainers {
         assertThatThrownBy(() ->
                 restClient.post()
                         .uri("/api/v1/transactions/transfer")
-                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                        .header(HttpHeaders.COOKIE, "accessToken=" + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .body(transferRequest)
                         .retrieve()
@@ -347,13 +349,13 @@ public class TransactionIntegrationTest extends AbstractTestContainers {
         Account account = createAccountPort.execute(ownerEmail, BigDecimal.valueOf(100));
 
         String adminEmail = "admin@gmail.com";
-        String token = jwtUtil.generateTestToken(adminEmail,List.of("ROLE_ADMIN"));
+        String token = jwtUtil.generateTestToken(adminEmail, List.of("ROLE_ADMIN"));
 
         DepositRequest depositRequest = new DepositRequest(account.getIban(), BigDecimal.valueOf(50));
 
         ResponseEntity<TransactionDTO> response = restClient.post()
                 .uri("/api/v1/transactions/admin/deposit")
-                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .header(HttpHeaders.COOKIE, "accessToken=" + token)
                 .contentType(MediaType.APPLICATION_JSON)
                 .body(depositRequest)
                 .retrieve().toEntity(TransactionDTO.class);
@@ -381,7 +383,7 @@ public class TransactionIntegrationTest extends AbstractTestContainers {
 
         ResponseEntity<TransactionDTO> response = restClient.post()
                 .uri("/api/v1/transactions/admin/withdraw")
-                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .header(HttpHeaders.COOKIE, "accessToken=" + token)
                 .contentType(MediaType.APPLICATION_JSON)
                 .body(withdrawalRequest)
                 .retrieve()
@@ -415,7 +417,7 @@ public class TransactionIntegrationTest extends AbstractTestContainers {
         DepositRequest depositRequest = new DepositRequest(account.getIban(), BigDecimal.valueOf(50));
         restClient.post()
                 .uri("/api/v1/transactions/deposit")
-                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .header(HttpHeaders.COOKIE, "accessToken=" + token)
                 .contentType(MediaType.APPLICATION_JSON)
                 .body(depositRequest)
                 .retrieve()
@@ -424,7 +426,7 @@ public class TransactionIntegrationTest extends AbstractTestContainers {
         WithdrawalRequest withdrawalRequest = new WithdrawalRequest(account.getIban(), BigDecimal.valueOf(30));
         restClient.post()
                 .uri("/api/v1/transactions/withdraw")
-                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .header(HttpHeaders.COOKIE, "accessToken=" + token)
                 .contentType(MediaType.APPLICATION_JSON)
                 .body(withdrawalRequest)
                 .retrieve()
@@ -432,7 +434,7 @@ public class TransactionIntegrationTest extends AbstractTestContainers {
 
         Map<String, Object> response = restClient.get()
                 .uri("/api/v1/transactions/movements/{iban}", account.getIban())
-                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .header(HttpHeaders.COOKIE, "accessToken=" + token)
                 .retrieve()
                 .body(new ParameterizedTypeReference<Map<String, Object>>() {});
 
@@ -455,7 +457,7 @@ public class TransactionIntegrationTest extends AbstractTestContainers {
         assertThatThrownBy(() ->
                 restClient.get()
                         .uri("/api/v1/transactions/movements/{iban}", account.getIban())
-                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + attackerToken)
+                        .header(HttpHeaders.COOKIE, "accessToken=" + attackerToken)
                         .retrieve()
                         .toBodilessEntity()
         ).isInstanceOf(HttpClientErrorException.class).hasMessageContaining("403");
@@ -475,7 +477,7 @@ public class TransactionIntegrationTest extends AbstractTestContainers {
         DepositRequest depositRequest = new DepositRequest(account.getIban(), BigDecimal.valueOf(50));
         restClient.post()
                 .uri("/api/v1/transactions/deposit")
-                .header(HttpHeaders.AUTHORIZATION, "Bearer " + clientToken)
+                .header(HttpHeaders.COOKIE, "accessToken=" + clientToken)
                 .contentType(MediaType.APPLICATION_JSON)
                 .body(depositRequest)
                 .retrieve()
@@ -483,7 +485,7 @@ public class TransactionIntegrationTest extends AbstractTestContainers {
 
         ResponseEntity<Map<String, Object>> adminResponse = restClient.get()
                 .uri("/api/v1/transactions/admin/movements/{iban}", account.getIban())
-                .header(HttpHeaders.AUTHORIZATION, "Bearer " + adminToken)
+                .header(HttpHeaders.COOKIE, "accessToken=" + adminToken)
                 .retrieve()
                 .toEntity(new ParameterizedTypeReference<Map<String, Object>>() {});
 
@@ -501,7 +503,7 @@ public class TransactionIntegrationTest extends AbstractTestContainers {
         assertThatThrownBy(() ->
                 restClient.get()
                         .uri("/api/v1/transactions/admin/movements/{iban}", account.getIban())
-                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + clientToken)
+                        .header(HttpHeaders.COOKIE, "accessToken=" + clientToken)
                         .retrieve()
                         .toBodilessEntity()
         )
@@ -537,7 +539,7 @@ public class TransactionIntegrationTest extends AbstractTestContainers {
                     WithdrawalRequest request = new WithdrawalRequest(account.getIban(), withdrawAmount);
                     restClient.post()
                             .uri("/api/v1/transactions/withdraw")
-                            .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                            .header(HttpHeaders.COOKIE, "accessToken=" + token)
                             .contentType(MediaType.APPLICATION_JSON)
                             .body(request)
                             .retrieve()
@@ -594,7 +596,7 @@ public class TransactionIntegrationTest extends AbstractTestContainers {
                     TransferRequest request = new TransferRequest(accountA.getIban(), accountB.getIban(), amount);
                     restClient.post()
                             .uri("/api/v1/transactions/transfer")
-                            .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenA)
+                            .header(HttpHeaders.COOKIE, "accessToken=" + tokenA)
                             .contentType(MediaType.APPLICATION_JSON)
                             .body(request)
                             .retrieve()
@@ -614,7 +616,7 @@ public class TransactionIntegrationTest extends AbstractTestContainers {
                     TransferRequest request = new TransferRequest(accountB.getIban(), accountA.getIban(), amount);
                     restClient.post()
                             .uri("/api/v1/transactions/transfer")
-                            .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenB)
+                            .header(HttpHeaders.COOKIE, "accessToken=" + tokenB)
                             .contentType(MediaType.APPLICATION_JSON)
                             .body(request)
                             .retrieve()
@@ -644,14 +646,13 @@ public class TransactionIntegrationTest extends AbstractTestContainers {
         String userEmail = "paginated_user@bank.com";
         String token = jwtUtil.generateTestToken(userEmail, List.of("ROLE_USER"));
 
-
         Account account = createAccountPort.execute(userEmail, BigDecimal.valueOf(1000));
 
         for (int i = 1; i <= 15; i++) {
             DepositRequest req = new DepositRequest(account.getIban(), BigDecimal.valueOf(10 + i));
             restClient.post()
                     .uri("/api/v1/transactions/deposit")
-                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                    .header(HttpHeaders.COOKIE, "accessToken=" + token)
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(req)
                     .retrieve()
@@ -660,7 +661,7 @@ public class TransactionIntegrationTest extends AbstractTestContainers {
 
         Map<String, Object> firstPage = restClient.get()
                 .uri("/api/v1/transactions/movements/{iban}?page=0&size=5", account.getIban())
-                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .header(HttpHeaders.COOKIE, "accessToken=" + token)
                 .retrieve()
                 .body(new ParameterizedTypeReference<Map<String, Object>>() {});
 
@@ -675,7 +676,7 @@ public class TransactionIntegrationTest extends AbstractTestContainers {
 
         Map<String, Object> lastPage = restClient.get()
                 .uri("/api/v1/transactions/movements/{iban}?page=2&size=5", account.getIban())
-                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .header(HttpHeaders.COOKIE, "accessToken=" + token)
                 .retrieve()
                 .body(new ParameterizedTypeReference<Map<String, Object>>() {});
 
@@ -702,7 +703,7 @@ public class TransactionIntegrationTest extends AbstractTestContainers {
         try {
             firstResponse = restClient.post()
                     .uri("/api/v1/transactions/deposit")
-                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                    .header(HttpHeaders.COOKIE, "accessToken=" + token)
                     .header("X-Idempotency-Key", idempotencyKey)
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(depositRequest)
@@ -719,7 +720,7 @@ public class TransactionIntegrationTest extends AbstractTestContainers {
 
         ResponseEntity<TransactionDTO> secondResponse = restClient.post()
                 .uri("/api/v1/transactions/deposit")
-                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .header(HttpHeaders.COOKIE, "accessToken=" + token)
                 .header("X-Idempotency-Key", idempotencyKey)
                 .contentType(MediaType.APPLICATION_JSON)
                 .body(depositRequest)
@@ -748,7 +749,7 @@ public class TransactionIntegrationTest extends AbstractTestContainers {
 
         ResponseEntity<Void> firstResponse = restClient.post()
                 .uri("/api/v1/transactions/withdraw")
-                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .header(HttpHeaders.COOKIE, "accessToken=" + token)
                 .header("X-Idempotency-Key", idempotencyKey)
                 .contentType(MediaType.APPLICATION_JSON)
                 .body(withdrawRequest)
@@ -759,7 +760,7 @@ public class TransactionIntegrationTest extends AbstractTestContainers {
 
         ResponseEntity<Void> secondResponse = restClient.post()
                 .uri("/api/v1/transactions/withdraw")
-                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .header(HttpHeaders.COOKIE, "accessToken=" + token)
                 .header("X-Idempotency-Key", idempotencyKey)
                 .contentType(MediaType.APPLICATION_JSON)
                 .body(withdrawRequest)
@@ -787,7 +788,7 @@ public class TransactionIntegrationTest extends AbstractTestContainers {
 
         ResponseEntity<Void> firstResponse = restClient.post()
                 .uri("/api/v1/transactions/transfer")
-                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .header(HttpHeaders.COOKIE, "accessToken=" + token)
                 .header("X-Idempotency-Key", idempotencyKey)
                 .contentType(MediaType.APPLICATION_JSON)
                 .body(transferRequest)
@@ -798,7 +799,7 @@ public class TransactionIntegrationTest extends AbstractTestContainers {
 
         ResponseEntity<Void> secondResponse = restClient.post()
                 .uri("/api/v1/transactions/transfer")
-                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .header(HttpHeaders.COOKIE, "accessToken=" + token)
                 .header("X-Idempotency-Key", idempotencyKey)
                 .contentType(MediaType.APPLICATION_JSON)
                 .body(transferRequest)
@@ -807,6 +808,4 @@ public class TransactionIntegrationTest extends AbstractTestContainers {
 
         assertThat(secondResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
     }
-
-
 }

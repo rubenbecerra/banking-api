@@ -1,5 +1,7 @@
-package com.banking;
+package com.banking.accounts;
 
+import com.banking.AbstractTestContainers;
+import com.banking.Main;
 import com.banking.accounts.application.usecase.CreateAccountPort;
 import com.banking.accounts.application.usecase.GetAccountsPort;
 import com.banking.accounts.domain.model.Account;
@@ -20,7 +22,7 @@ import org.springframework.web.client.RestClient;
 import java.math.BigDecimal;
 import java.util.List;
 
-import static org.assertj.core.api.Java6Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThat;
 
 @SpringBootTest(
         classes = Main.class,
@@ -58,17 +60,10 @@ public class AccountIntegrationTest extends AbstractTestContainers {
         String email = "test@gmail.com";
         String token = jwtUtil.generateTestToken(email, List.of("ROLE_USER"));
 
-        HttpHeaders headers = new HttpHeaders();
-        headers.setBearerAuth(token);
-        headers.setContentType(MediaType.APPLICATION_JSON);
-
-        HttpEntity<Void> request = new HttpEntity<>(headers);
-
         ResponseEntity<AccountDTO> response = restClient.post()
                 .uri("/api/v1/accounts/me")
-                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .header(HttpHeaders.COOKIE, "accessToken=" + token)
                 .contentType(MediaType.APPLICATION_JSON)
-                .body(request)
                 .retrieve()
                 .toEntity(AccountDTO.class);
 
@@ -88,15 +83,11 @@ public class AccountIntegrationTest extends AbstractTestContainers {
         String targetEmail = "test@gmail.com";
         BigDecimal amount = BigDecimal.valueOf(100);
 
-        HttpHeaders headers = new HttpHeaders();
-        headers.setBearerAuth(token);
-        headers.setContentType(MediaType.APPLICATION_JSON);
-
-        AdminAccountCreationRequest bodyRequest = new AdminAccountCreationRequest(targetEmail,amount);
+        AdminAccountCreationRequest bodyRequest = new AdminAccountCreationRequest(targetEmail, amount);
 
         ResponseEntity<AccountDTO> response = restClient.post()
                 .uri("/api/v1/accounts/admin")
-                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .header(HttpHeaders.COOKIE, "accessToken=" + token)
                 .contentType(MediaType.APPLICATION_JSON)
                 .body(bodyRequest)
                 .retrieve()
@@ -114,10 +105,6 @@ public class AccountIntegrationTest extends AbstractTestContainers {
         String ownerEmail = "test@gmail.com";
         String token = jwtUtil.generateTestToken(ownerEmail, List.of("ROLE_USER"));
 
-        HttpHeaders header = new HttpHeaders();
-        header.setBearerAuth(token);
-        header.setContentType(MediaType.APPLICATION_JSON);
-
         String otherEmail = "otheruser@gmail.com";
 
         createAccountPort.execute(ownerEmail, BigDecimal.valueOf(100));
@@ -126,7 +113,7 @@ public class AccountIntegrationTest extends AbstractTestContainers {
 
         ResponseEntity<List<AccountDTO>> response = restClient.get()
                 .uri("/api/v1/accounts/me")
-                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .header(HttpHeaders.COOKIE, "accessToken=" + token)
                 .accept(MediaType.APPLICATION_JSON)
                 .retrieve().toEntity(new ParameterizedTypeReference<List<AccountDTO>>() {
                 });
@@ -144,10 +131,6 @@ public class AccountIntegrationTest extends AbstractTestContainers {
         String adminEmail = "admin@gmail.com";
         String token = jwtUtil.generateTestToken(adminEmail, List.of("ROLE_ADMIN"));
 
-        HttpHeaders headers = new HttpHeaders();
-        headers.setBearerAuth(token);
-        headers.setContentType(MediaType.APPLICATION_JSON);
-
         String otherEmail = "otheruser@gmail.com";
         String anotherEmail = "anotheruser@gmail.com";
 
@@ -159,7 +142,7 @@ public class AccountIntegrationTest extends AbstractTestContainers {
 
         ResponseEntity<List<AccountDTO>> response = restClient.get()
                 .uri("/api/v1/accounts/admin")
-                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .header(HttpHeaders.COOKIE, "accessToken=" + token)
                 .accept(MediaType.APPLICATION_JSON)
                 .retrieve().toEntity(new ParameterizedTypeReference<List<AccountDTO>>() {
                 });
@@ -180,11 +163,11 @@ public class AccountIntegrationTest extends AbstractTestContainers {
 
         Account accountToDelete = createAccountPort.execute(ownerEmail, BigDecimal.valueOf(100));
         Account accountToKeep = createAccountPort.execute(ownerEmail, BigDecimal.valueOf(250));
-        Account otherAccount = createAccountPort.execute(otherEmail, BigDecimal.valueOf(500));
+        createAccountPort.execute(otherEmail, BigDecimal.valueOf(500));
 
         ResponseEntity<Void> response = restClient.delete()
                 .uri("/api/v1/accounts/{iban}", accountToDelete.getIban())
-                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .header(HttpHeaders.COOKIE, "accessToken=" + token)
                 .retrieve()
                 .toBodilessEntity();
 
@@ -210,12 +193,12 @@ public class AccountIntegrationTest extends AbstractTestContainers {
         String token = jwtUtil.generateTestToken(adminEmail, List.of("ROLE_ADMIN"));
 
         Account accountToDelete = createAccountPort.execute(otherEmail, BigDecimal.valueOf(100));
-        Account otherAccount = createAccountPort.execute(anotherEmail, BigDecimal.valueOf(250));
+        createAccountPort.execute(anotherEmail, BigDecimal.valueOf(250));
         Account accountToKeep = createAccountPort.execute(otherEmail, BigDecimal.valueOf(500));
 
         ResponseEntity<Void> response = restClient.delete()
                 .uri("/api/v1/accounts/admin/{iban}", accountToDelete.getIban())
-                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .header(HttpHeaders.COOKIE, "accessToken=" + token)
                 .retrieve()
                 .toBodilessEntity();
 
