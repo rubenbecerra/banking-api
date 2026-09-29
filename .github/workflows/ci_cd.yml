@@ -73,6 +73,7 @@ jobs:
           tags: |
             ghcr.io/${{ env.IMAGE_NAME }}:latest
             ghcr.io/${{ env.IMAGE_NAME }}:${{ github.sha }}
+
   deploy:
     name: Deploy to MiniPC via Tailscale
     needs: publish-docker-image
@@ -80,6 +81,9 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
       - name: Connect to Tailscale VPN
         uses: tailscale/github-action@v2
         with:
@@ -95,6 +99,10 @@ jobs:
           mkdir -p ~/.ssh
           ssh-keyscan -H ${{ secrets.SERVER_IP }} >> ~/.ssh/known_hosts
 
+      - name: Copy Config Files to Remote Server
+        run: |
+          scp docker-compose.yml prometheus.yml ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }}:~/app/
+
       - name: Run Docker Compose on Remote Server
         run: |
-          ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }} "docker pull ghcr.io/${{ github.repository }}:latest && cd ~/app && docker compose up -d --build && docker image prune -f"
+          ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }} "cd ~/app && docker pull ghcr.io/${{ github.repository }}:latest && docker compose down && docker compose up -d --build && docker image prune -f"
