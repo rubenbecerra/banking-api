@@ -1,0 +1,35 @@
+name: Production Deployment
+
+on:
+  push:
+    branches: [ main, master ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Connect to Tailscale VPN
+        uses: tailscale/github-action@v2
+        with:
+          authkey: ${{ secrets.TS_AUTHKEY }}
+
+      - name: Set up SSH Key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Configure known_hosts
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H ${{ secrets.SERVER_IP }} >> ~/.ssh/known_hosts
+
+      - name: Sync repository to Remote Server
+        run: |
+          rsync -avz --exclude '.git' ./ ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }}:~/app/
+
+      - name: Run Docker Compose
+        run: |
+          ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }} "cd ~/app && docker compose up -d --build"
