@@ -36,7 +36,7 @@ services:
       - app-network
 
   banking-api:
-    build: .
+    image: ghcr.io/${GITHUB_REPOSITORY:-rubenbecerra/banking-api}:latest
     container_name: banking-api
     ports:
       - "8081:8081"
@@ -61,9 +61,39 @@ services:
       retries: 5
       start_period: 20s
 
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: banking-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+    networks:
+      - app-network
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: banking-grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    depends_on:
+      - prometheus
+    networks:
+      - app-network
+
 volumes:
   postgres_data:
   redis_data:
+  prometheus_data:
+  grafana_data:
 
 networks:
   app-network:
