@@ -33,5 +33,6 @@ public abstract class AbstractTestcontainersTest {
 
         registry.add("spring.data.redis.host", redisContainer::getHost);
         registry.add("spring.data.redis.port", () -> redisContainer.getMappedPort(6379));
+        registry.add("jwt.secret", () -> "test-only-jwt-secret-with-at-least-32-characters");
     }
 }

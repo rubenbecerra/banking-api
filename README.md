@@ -64,12 +64,54 @@ To guarantee data safety, consistency, and protection against accidental request
 The complete architecture (API, PostgreSQL 16, and Redis 7) runs containerized out-of-the-box via Docker Compose:
 
 1. Clone the repository.
-2. Review your environment variables in `docker-compose.yml`.
+2. Create your local environment file and fill in the values:
+   ```bash
+   cp .env.example .env
+   ```
 3. Build and spin up all services locally in detached mode:
+   ```bash
+   docker compose up --build -d
+   ```
+
+### 🔐 Environment Variables
+
+Credentials are injected through environment variables; no secrets are committed to the repository. `.env` is git-ignored and `.env.example` documents every required key.
+
+| Variable | Description |
+|---|---|
+| `DB_NAME` | PostgreSQL database name (default: `accounts`) |
+| `DB_USERNAME` | PostgreSQL user (default: `postgres`) |
+| `DB_PASSWORD` | PostgreSQL password |
+| `DB_URL` | JDBC URL used when running the API outside Docker |
+| `JWT_SECRET` | HMAC-SHA256 signing key, **at least 32 characters** |
+| `GRAFANA_ADMIN_USER` | Grafana admin user |
+| `GRAFANA_ADMIN_PASSWORD` | Grafana admin password |
+
+Generate a strong JWT secret with:
 
 ```bash
-docker compose up --build -d
+openssl rand -hex 32
 ```
+
+To run the API locally without Docker, Spring Boot reads the same `.env` file automatically (`spring.config.import` is already configured in `application.properties`):
+
+```bash
+./mvnw spring-boot:run
+```
+
+#### GitHub Actions secrets for deployment
+
+The CD job writes `~/app/.env` on the target server from these repository secrets:
+
+- `DB_PASSWORD`
+- `JWT_SECRET`
+- `GRAFANA_ADMIN_USER`
+- `GRAFANA_ADMIN_PASSWORD`
+
+Existing deployment secrets (`TS_AUTHKEY`, `SSH_PRIVATE_KEY`, `SERVER_IP`, `SERVER_USER`) are unchanged.
+
+> If any credential was ever committed to the repository, rotate it. Removing it from the current files does not remove it from the Git history.
+
 ## 🏛️ Architecture Overview
 
 ```text

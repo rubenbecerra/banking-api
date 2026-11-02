@@ -103,6 +103,17 @@ jobs:
         run: |
           scp docker-compose.yml prometheus.yml ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }}:~/app/
 
+      - name: Write Environment File on Remote Server
+        run: |
+          ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }} "cat > ~/app/.env && chmod 600 ~/app/.env" <<'EOF'
+          DB_NAME=accounts
+          DB_USERNAME=postgres
+          DB_PASSWORD=${{ secrets.DB_PASSWORD }}
+          JWT_SECRET=${{ secrets.JWT_SECRET }}
+          GRAFANA_ADMIN_USER=${{ secrets.GRAFANA_ADMIN_USER }}
+          GRAFANA_ADMIN_PASSWORD=${{ secrets.GRAFANA_ADMIN_PASSWORD }}
+          EOF
+
       - name: Run Docker Compose on Remote Server
         run: |
           ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }} "cd ~/app && docker pull ghcr.io/${{ github.repository }}:latest && docker compose down && docker compose up -d --build && docker image prune -f"

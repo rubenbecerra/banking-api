@@ -38,6 +38,7 @@ class AccountUseCaseTest {
     @Test
     @DisplayName("Should retrieve the accounts of an user")
     void getAccountsByOwnerTest() {
+        // given
         String ownerEmail = "test1@gmail.com";
 
         List<Account> accounts = List.of(
@@ -47,8 +48,10 @@ class AccountUseCaseTest {
 
         when(repo.findAllByOwner(ownerEmail)).thenReturn(accounts);
 
+        // when
         List<Account> result = getAccountsUseCase.getByOwner(ownerEmail);
 
+        // then
         assertThat(result).isNotNull();
         assertThat(result).hasSize(2);
         assertThat(result.getFirst().getOwner()).isEqualTo(ownerEmail);
