@@ -125,6 +125,16 @@ To run the API locally without Docker, Spring Boot reads the same `.env` file au
 ./mvnw spring-boot:run
 ```
 
+### 🔑 Demo Credentials
+
+The Flyway migrations seed an administrator account:
+
+| Email | Password |
+|---|---|
+| `admin@bank.com` | `Admin123!` |
+
+These credentials are for local/demo purposes only. Change the password before deploying to a real environment.
+
 #### GitHub Actions secrets for deployment
 
 The CD job writes `~/app/.env` on the target server from these repository secrets:
