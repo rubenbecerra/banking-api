@@ -9,13 +9,18 @@ import com.banking.customers.application.usecase.GetCustomerPort;
 import com.banking.customers.application.usecase.RegisterCustomerPort;
 import com.banking.customers.application.usecase.UpdateCustomerPort;
 import com.banking.customers.domain.model.Customer;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.cache.Cache;
+import org.springframework.cache.CacheManager;
 
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -25,8 +30,19 @@ public class CachedCustomerUseCasesTest {
     @Mock
     private UpdateCustomerPort updateTarget;
 
+    @Mock
+    private CacheManager cacheManager;
+
+    @Mock
+    private Cache cache;
+
     @InjectMocks
     private CachedUpdateCustomerUseCaseDecorator updateDecorator;
+
+    @BeforeEach
+    void setUp() {
+        lenient().when(cacheManager.getCache(anyString())).thenReturn(cache);
+    }
 
     @Test
     void shouldDelegateUpdate() {

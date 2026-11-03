@@ -111,6 +111,8 @@ Credentials are injected through environment variables; no secrets are committed
 | `DB_PASSWORD` | PostgreSQL password |
 | `DB_URL` | JDBC URL used when running the API outside Docker |
 | `JWT_SECRET` | HMAC-SHA256 signing key, **at least 32 characters** |
+| `REDIS_HOST` | Redis host when running outside Docker (default: `localhost`) |
+| `REDIS_PORT` | Redis port when running outside Docker (default: `6379`) |
 | `GRAFANA_ADMIN_USER` | Grafana admin user |
 | `GRAFANA_ADMIN_PASSWORD` | Grafana admin password |
 
@@ -120,11 +122,26 @@ Generate a strong JWT secret with:
 openssl rand -hex 32
 ```
 
-To run the API locally without Docker, Spring Boot reads the same `.env` file automatically (`spring.config.import` is already configured in `application.properties`):
+To run the API locally without Docker, Spring Boot reads the same `.env` file automatically (`spring.config.import` is already configured in `application.properties`). Activate the `dev` profile to get SQL logging and detailed errors:
 
 ```bash
-./mvnw spring-boot:run
+SPRING_PROFILES_ACTIVE=dev ./mvnw spring-boot:run
 ```
+
+On Windows PowerShell:
+
+```powershell
+$env:SPRING_PROFILES_ACTIVE="dev"; .\mvnw.cmd spring-boot:run
+```
+
+### 🧭 Profiles
+
+| Profile | Used by | Behavior |
+|---|---|---|
+| `dev` | Local development | SQL logging, stack traces and full Actuator health details |
+| `prod` | Docker Compose / deployment | No SQL logging, no stack traces, Actuator limited to `health`, `info` and `prometheus` |
+
+Docker Compose sets `SPRING_PROFILES_ACTIVE=prod` explicitly. If no profile is active, `application.properties` provides production-safe defaults (no stack traces, no SQL logging, limited Actuator).
 
 ### 🔑 Demo Credentials
 

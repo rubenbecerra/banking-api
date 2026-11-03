@@ -7,6 +7,7 @@ import com.banking.customers.application.decorator.CachedDeleteCustomerUseCaseDe
 import com.banking.customers.application.decorator.CachedGetCustomerUseCaseDecorator;
 import com.banking.customers.application.decorator.CachedRegisterCustomerUseCaseDecorator;
 import com.banking.customers.application.decorator.CachedUpdateCustomerUseCaseDecorator;
+import com.banking.customers.application.decorator.transactional.UpdateCustomerUseCaseTransactionalDecorator;
 import com.banking.customers.application.usecase.DeleteCustomerPort;
 import com.banking.customers.application.usecase.DeleteCustomerUseCase;
 import com.banking.customers.application.usecase.GetCustomerPort;
@@ -17,11 +18,13 @@ import com.banking.customers.application.usecase.UpdateCustomerPort;
 import com.banking.customers.application.usecase.UpdateCustomerUseCase;
 import com.banking.customers.domain.repository.CustomerRepository;
 import com.banking.shared.security.JWTUtil;
+import org.springframework.cache.CacheManager;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.transaction.support.TransactionTemplate;
 
 @Configuration
 public class UseCaseConfig {
@@ -46,9 +49,13 @@ public class UseCaseConfig {
     }
 
     @Bean
-    public UpdateCustomerPort updateCustomerPort(CustomerRepository customerRepository) {
-        return new CachedUpdateCustomerUseCaseDecorator(
-                new UpdateCustomerUseCase(customerRepository));
+    public UpdateCustomerPort updateCustomerPort(CustomerRepository customerRepository,
+                                                 TransactionTemplate transactionTemplate,
+                                                 CacheManager cacheManager) {
+        UpdateCustomerUseCase useCase = new UpdateCustomerUseCase(customerRepository);
+        UpdateCustomerPort transactional =
+                new UpdateCustomerUseCaseTransactionalDecorator(useCase, transactionTemplate);
+        return new CachedUpdateCustomerUseCaseDecorator(transactional, cacheManager);
     }
 
     @Bean
