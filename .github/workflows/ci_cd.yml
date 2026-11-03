@@ -29,8 +29,8 @@ jobs:
       - name: Make Maven Wrapper Executable
         run: chmod +x ./mvnw
 
-      - name: Run Tests with JaCoCo Coverage
-        run: ./mvnw clean test
+      - name: Run Tests, Enforce Coverage & Package
+        run: ./mvnw -B clean verify
 
       - name: Upload JaCoCo Coverage Report
         uses: actions/upload-artifact@v4
@@ -74,46 +74,51 @@ jobs:
             ghcr.io/${{ env.IMAGE_NAME }}:latest
             ghcr.io/${{ env.IMAGE_NAME }}:${{ github.sha }}
 
-  deploy:
-    name: Deploy to MiniPC via Tailscale
-    needs: publish-docker-image
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Connect to Tailscale VPN
-        uses: tailscale/github-action@v2
-        with:
-          authkey: ${{ secrets.TS_AUTHKEY }}
-
-      - name: Set up SSH Key
-        uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
-
-      - name: Configure known_hosts
-        run: |
-          mkdir -p ~/.ssh
-          ssh-keyscan -H ${{ secrets.SERVER_IP }} >> ~/.ssh/known_hosts
-
-      - name: Copy Config Files to Remote Server
-        run: |
-          scp docker-compose.yml prometheus.yml ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }}:~/app/
-
-      - name: Write Environment File on Remote Server
-        run: |
-          ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }} "cat > ~/app/.env && chmod 600 ~/app/.env" <<'EOF'
-          DB_NAME=accounts
-          DB_USERNAME=postgres
-          DB_PASSWORD=${{ secrets.DB_PASSWORD }}
-          JWT_SECRET=${{ secrets.JWT_SECRET }}
-          GRAFANA_ADMIN_USER=${{ secrets.GRAFANA_ADMIN_USER }}
-          GRAFANA_ADMIN_PASSWORD=${{ secrets.GRAFANA_ADMIN_PASSWORD }}
-          EOF
-
-      - name: Run Docker Compose on Remote Server
-        run: |
-          ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }} "cd ~/app && docker pull ghcr.io/${{ github.repository }}:latest && docker compose down && docker compose up -d --build && docker image prune -f")
+  # ---------------------------------------------------------------------------
+  # Deploy job intentionally disabled.
+  # The whole job is kept as text. To re-enable it, remove the leading "# "
+  # from every line below and commit the change.
+  # ---------------------------------------------------------------------------
+  # deploy:
+  #   name: Deploy to MiniPC via Tailscale
+  #   needs: publish-docker-image
+  #   if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+  #   runs-on: ubuntu-latest
+  #
+  #   steps:
+  #     - name: Checkout Code
+  #       uses: actions/checkout@v4
+  #
+  #     - name: Connect to Tailscale VPN
+  #       uses: tailscale/github-action@v2
+  #       with:
+  #         authkey: ${{ secrets.TS_AUTHKEY }}
+  #
+  #     - name: Set up SSH Key
+  #       uses: webfactory/ssh-agent@v0.9.0
+  #       with:
+  #         ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+  #
+  #     - name: Configure known_hosts
+  #       run: |
+  #         mkdir -p ~/.ssh
+  #         ssh-keyscan -H ${{ secrets.SERVER_IP }} >> ~/.ssh/known_hosts
+  #
+  #     - name: Copy Config Files to Remote Server
+  #       run: |
+  #         scp docker-compose.yml prometheus.yml ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }}:~/app/
+  #
+  #     - name: Write Environment File on Remote Server
+  #       run: |
+  #         ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }} "cat > ~/app/.env && chmod 600 ~/app/.env" <<'EOF'
+  #         DB_NAME=accounts
+  #         DB_USERNAME=postgres
+  #         DB_PASSWORD=${{ secrets.DB_PASSWORD }}
+  #         JWT_SECRET=${{ secrets.JWT_SECRET }}
+  #         GRAFANA_ADMIN_USER=${{ secrets.GRAFANA_ADMIN_USER }}
+  #         GRAFANA_ADMIN_PASSWORD=${{ secrets.GRAFANA_ADMIN_PASSWORD }}
+  #         EOF
+  #
+  #     - name: Run Docker Compose on Remote Server
+  #       run: |
+  #         ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }} "cd ~/app && docker pull ghcr.io/${{ github.repository }}:latest && docker compose down && docker compose up -d --build && docker image prune -f"

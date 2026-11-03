@@ -71,6 +71,20 @@ Customer reads are cached in Redis through application-layer decorators, keeping
 
 ---
 
+## 🧪 Testing & Quality Gates
+
+```bash
+./mvnw verify
+```
+
+- Unit tests with JUnit 5, AssertJ and Mockito.
+- Integration tests with **Testcontainers** (PostgreSQL 16 and Redis 7), including concurrency and idempotency scenarios.
+- **JaCoCo enforces a minimum of 85% instruction coverage**; the build fails below that threshold.
+- The HTML report is generated at `target/site/jacoco/index.html`.
+- CI runs `./mvnw -B clean verify` and uploads the coverage report as a build artifact.
+
+---
+
 ## 🚀 Local Deployment with Docker Compose
 
 The complete architecture (API, PostgreSQL 16, and Redis 7) runs containerized out-of-the-box via Docker Compose:
