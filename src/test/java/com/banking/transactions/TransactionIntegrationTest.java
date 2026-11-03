@@ -808,4 +808,99 @@ public class TransactionIntegrationTest extends AbstractTestContainers {
 
         assertThat(secondResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
     }
+
+    @Test
+    @DisplayName("Idempotency keys are scoped per authenticated user")
+    void idempotencyKeyIsScopedPerUser() {
+        String userA = "idem-a@bank.com";
+        String userB = "idem-b@bank.com";
+        String tokenA = jwtUtil.generateTestToken(userA, List.of("ROLE_USER"));
+        String tokenB = jwtUtil.generateTestToken(userB, List.of("ROLE_USER"));
+
+        Account accountA = createAccountPort.execute(userA, BigDecimal.ZERO);
+        Account accountB = createAccountPort.execute(userB, BigDecimal.ZERO);
+
+        String sharedKey = "shared-idempotency-key-123";
+
+        ResponseEntity<TransactionDTO> first = restClient.post()
+                .uri("/api/v1/transactions/deposit")
+                .header(HttpHeaders.COOKIE, "accessToken=" + tokenA)
+                .header("X-Idempotency-Key", sharedKey)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(new DepositRequest(accountA.getIban(), BigDecimal.valueOf(50)))
+                .retrieve()
+                .toEntity(TransactionDTO.class);
+
+        ResponseEntity<TransactionDTO> second = restClient.post()
+                .uri("/api/v1/transactions/deposit")
+                .header(HttpHeaders.COOKIE, "accessToken=" + tokenB)
+                .header("X-Idempotency-Key", sharedKey)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(new DepositRequest(accountB.getIban(), BigDecimal.valueOf(50)))
+                .retrieve()
+                .toEntity(TransactionDTO.class);
+
+        assertThat(first.getStatusCode().value()).isEqualTo(201);
+        assertThat(second.getStatusCode().value()).isEqualTo(201);
+        assertThat(second.getBody()).isNotNull();
+        assertThat(second.getBody().targetIban()).isEqualTo(accountB.getIban());
+
+        assertThat(accountRepository.findByIban(accountA.getIban()).orElseThrow().getBalance())
+                .isEqualByComparingTo(BigDecimal.valueOf(50));
+        assertThat(accountRepository.findByIban(accountB.getIban()).orElseThrow().getBalance())
+                .isEqualByComparingTo(BigDecimal.valueOf(50));
+        assertThat(transactionRepository.findAll()).hasSize(2);
+    }
+
+    @Test
+    @DisplayName("Admin deposit and withdrawal with the same key do not collide")
+    void adminOperationsUseDifferentIdempotencyScopes() {
+        String adminToken = jwtUtil.generateTestToken("admin@bank.com", List.of("ROLE_ADMIN"));
+        Account account = createAccountPort.execute("admin-target@bank.com", BigDecimal.valueOf(100));
+        String key = "admin-shared-key-123";
+
+        ResponseEntity<TransactionDTO> deposit = restClient.post()
+                .uri("/api/v1/transactions/admin/deposit")
+                .header(HttpHeaders.COOKIE, "accessToken=" + adminToken)
+                .header("X-Idempotency-Key", key)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(new DepositRequest(account.getIban(), BigDecimal.valueOf(50)))
+                .retrieve()
+                .toEntity(TransactionDTO.class);
+
+        ResponseEntity<TransactionDTO> withdrawal = restClient.post()
+                .uri("/api/v1/transactions/admin/withdraw")
+                .header(HttpHeaders.COOKIE, "accessToken=" + adminToken)
+                .header("X-Idempotency-Key", key)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(new WithdrawalRequest(account.getIban(), BigDecimal.valueOf(20)))
+                .retrieve()
+                .toEntity(TransactionDTO.class);
+
+        assertThat(deposit.getStatusCode().value()).isEqualTo(201);
+        assertThat(withdrawal.getStatusCode().value()).isEqualTo(201);
+        assertThat(accountRepository.findByIban(account.getIban()).orElseThrow().getBalance())
+                .isEqualByComparingTo(BigDecimal.valueOf(130));
+    }
+
+    @Test
+    @DisplayName("Invalid idempotency keys are rejected with 400")
+    void invalidIdempotencyKeyIsRejected() {
+        String email = "invalid-key@bank.com";
+        String token = jwtUtil.generateTestToken(email, List.of("ROLE_USER"));
+        Account account = createAccountPort.execute(email, BigDecimal.ZERO);
+
+        assertThatThrownBy(() -> restClient.post()
+                .uri("/api/v1/transactions/deposit")
+                .header(HttpHeaders.COOKIE, "accessToken=" + token)
+                .header("X-Idempotency-Key", "bad key!")
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(new DepositRequest(account.getIban(), BigDecimal.ONE))
+                .retrieve()
+                .toBodilessEntity())
+                .isInstanceOf(HttpClientErrorException.BadRequest.class);
+
+        assertThat(accountRepository.findByIban(account.getIban()).orElseThrow().getBalance())
+                .isEqualByComparingTo(BigDecimal.ZERO);
+    }
 }

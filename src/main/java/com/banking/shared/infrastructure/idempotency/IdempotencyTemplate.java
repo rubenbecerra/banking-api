@@ -30,7 +30,9 @@ public class IdempotencyTemplate {
             return action.get();
         }
 
-        String redisKey = actionPrefix + ":" + idempotencyKey;
+        String user = IdempotencyContextHolder.getCurrentUser();
+        String scopedUser = (user == null || user.isBlank()) ? "anonymous" : user;
+        String redisKey = actionPrefix + ":" + scopedUser + "|" + idempotencyKey;
 
         boolean acquired = idempotencyRepository.setIfAbsent(redisKey, PROCESSING_STATUS, Duration.ofMinutes(5));
 

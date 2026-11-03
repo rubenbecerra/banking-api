@@ -56,6 +56,8 @@ The project is structured following strict modular boundaries separating account
 
 To guarantee data safety, consistency, and protection against accidental request retries over faulty networks:
 - **Idempotency Interceptors & Templates:** Intercepts state-changing operations using unique client request keys saved in Redis, safely rejecting duplicate executions.
+- **User-scoped keys:** Redis keys combine the operation, the authenticated user and the client key, so a key cannot return another user's response.
+- **Key validation:** `X-Idempotency-Key` must be 8–128 characters using letters, digits, `.`, `_`, `:` or `-`; invalid keys are rejected with `400 Bad Request`.
 - **Transactional Templates:** Ensures atomic boundaries across complex financial transfers, ensuring proper rollback behavior if any consistency check fails.
 
 ---

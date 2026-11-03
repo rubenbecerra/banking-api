@@ -28,7 +28,7 @@ public class WithdrawUseCaseIdempotencyDecorator implements WithdrawPort {
 
     @Override
     public OperationResult<Transaction> adminWithdraw(String sourceIban, BigDecimal amount) {
-        return idempotencyTemplate.execute("admin-deposit", Transaction.class,
+        return idempotencyTemplate.execute("admin-withdraw", Transaction.class,
                 () -> decoratedPort.adminWithdraw(sourceIban,amount)
         );
     }
