@@ -1,6 +1,7 @@
 package com.banking.shared.config;
 
 import com.banking.shared.security.JWTAuthenticationFilter;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -16,6 +17,7 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.cors.CorsConfiguration;
@@ -69,7 +71,8 @@ public class SecurityConfig {
             HttpSecurity http,
             JWTAuthenticationFilter jwtAuthenticationFilter,
             AuthenticationProvider authenticationProvider,
-            CorsConfigurationSource corsConfigurationSource
+            CorsConfigurationSource corsConfigurationSource,
+            AuthenticationEntryPoint authenticationEntryPoint
     ) throws Exception {
         http
                 .cors(cors -> cors.configurationSource(corsConfigurationSource))
@@ -77,6 +80,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.POST, "/api/v1/customers", "/api/v1/auth/**").permitAll()
                         .requestMatchers(
+                                "/error",
                                 "/actuator/**",
                                 "/v3/api-docs",
                                 "/v3/api-docs/**",
@@ -89,6 +93,8 @@ public class SecurityConfig {
                         .requestMatchers("/api/v1/transactions/admin/**").hasRole("ADMIN")
                         .anyRequest().authenticated()
                 )
+                .exceptionHandling(exception -> exception
+                        .authenticationEntryPoint(authenticationEntryPoint))
                 .sessionManagement(session -> session
                         .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
                 )
@@ -99,5 +105,20 @@ public class SecurityConfig {
                 );
 
         return http.build();
+    }
+
+    /**
+     * The JWT filter is a {@link org.springframework.stereotype.Component}, so Spring Boot would
+     * also register it as a plain servlet filter. This registration disables that duplicate
+     * execution; the filter still runs once inside the security chain via addFilterBefore.
+     */
+    @Bean
+    public FilterRegistrationBean<JWTAuthenticationFilter> jwtAuthenticationFilterRegistration(
+            JWTAuthenticationFilter jwtAuthenticationFilter
+    ) {
+        FilterRegistrationBean<JWTAuthenticationFilter> registration =
+                new FilterRegistrationBean<>(jwtAuthenticationFilter);
+        registration.setEnabled(false);
+        return registration;
     }
 }

@@ -17,6 +17,7 @@ A production-grade core banking RESTful API built with **Spring Boot 4** and **J
 The goal of this project is to implement an enterprise-standard backend architecture ready for high-concurrency financial workloads:
 - **Clean Architecture:** Strict domain-centric separation of concerns (Domain, Application, Infrastructure, and Presentation layers) ensuring high maintainability and testability.
 - **Secure Authentication Model:** Advanced security flow using stateless **JWT stored in secure HttpOnly Cookies** combined with **BCrypt password hashing** to prevent XSS and CSRF vulnerabilities.
+- **Consistent errors:** Missing, malformed or expired JWTs are rejected with `401 Unauthorized` and a JSON body before the request reaches the controllers.
 - **Transactional Consistency & Idempotency:** Explicit transaction management and idempotency guards to safely handle financial operations (Deposits, Withdrawals, Transfers) and prevent duplicate processing.
 - **Resilient Testing Strategy:** Elimination of in-memory mocks (H2) in favor of real, isolated runtime dependencies (**Testcontainers** for PostgreSQL and Redis).
 - **Quality Gates:** Strict code coverage validation enforced via **JaCoCo** ($\ge 85\%$) preventing failing builds from reaching production.
