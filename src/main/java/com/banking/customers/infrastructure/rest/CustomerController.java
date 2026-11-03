@@ -86,13 +86,13 @@ public class CustomerController {
     @PutMapping("{id}")
     public void updateCustomer(
             @PathVariable("id") Integer id,
-            @RequestBody CustomerUpdateRequest request) {
+            @Valid @RequestBody CustomerUpdateRequest request) {
         updateCustomerPort.update(id, request.name(), request.age(), request.gender());
     }
 
     @PutMapping("me")
     public void updateAuthenticatedCustomer(Authentication authentication,
-                                            @RequestBody CustomerUpdateRequest request) {
+                                            @Valid @RequestBody CustomerUpdateRequest request) {
         String email = authentication.getName();
         updateCustomerPort.updateByEmail(email, request.name(), request.age(), request.gender());
     }

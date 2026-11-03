@@ -114,9 +114,12 @@ public class TransactionController {
                                                                        @PageableDefault(size = 10, sort = "timestamp", direction = Sort.Direction.DESC)
                                                                  Pageable pageable) {
         String email = authentication.getName();
+        String sortBy = pageable.getSort().isSorted()
+                ? pageable.getSort().iterator().next().getProperty()
+                : "timestamp";
 
         PageResult<Transaction> domainResult = getTransactionsPort.getTransactionsForAccount(
-                iban, email, pageable.getPageNumber(), pageable.getPageSize(), pageable.getSort().iterator().next().getProperty()
+                iban, email, pageable.getPageNumber(), pageable.getPageSize(), sortBy
         );
 
         return ResponseEntity.ok(restMapper.toPageDTO(domainResult));

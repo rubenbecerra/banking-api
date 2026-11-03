@@ -2,6 +2,7 @@ package com.banking.auth.infrastructure.rest;
 
 import com.banking.auth.application.AuthenticationUseCase;
 import jakarta.servlet.http.HttpServletResponse;
+import jakarta.validation.Valid;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
@@ -26,7 +27,7 @@ public class AuthenticationController {
 
     @PostMapping("/login")
     public ResponseEntity<AuthenticationResponse> login(
-            @RequestBody AuthenticationRequest request,
+            @Valid @RequestBody AuthenticationRequest request,
             HttpServletResponse response
     ) {
         AuthenticationResponse authResult = authenticationService.login(request);
@@ -55,7 +56,7 @@ public class AuthenticationController {
 
     @PostMapping("/refresh")
     public ResponseEntity<AuthenticationResponse> refresh(
-            @RequestBody RefreshTokenRequest request,
+            @Valid @RequestBody RefreshTokenRequest request,
             HttpServletResponse response
     ) {
         AuthenticationResponse authResult = authenticationService.refreshToken(request.refreshToken());

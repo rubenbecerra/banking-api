@@ -18,6 +18,7 @@ The goal of this project is to implement an enterprise-standard backend architec
 - **Clean Architecture:** Strict domain-centric separation of concerns (Domain, Application, Infrastructure, and Presentation layers) ensuring high maintainability and testability.
 - **Secure Authentication Model:** Advanced security flow using stateless **JWT stored in secure HttpOnly Cookies** combined with **BCrypt password hashing** to prevent XSS and CSRF vulnerabilities.
 - **Consistent errors:** Missing, malformed or expired JWTs are rejected with `401 Unauthorized` and a JSON body before the request reaches the controllers.
+- **Input validation:** Bean Validation on auth, customer and transaction DTOs, Spanish IBAN format, amount precision, page-size limits, sort-field whitelist and password length.
 - **Transactional Consistency & Idempotency:** Explicit transaction management and idempotency guards to safely handle financial operations (Deposits, Withdrawals, Transfers) and prevent duplicate processing.
 - **Resilient Testing Strategy:** Elimination of in-memory mocks (H2) in favor of real, isolated runtime dependencies (**Testcontainers** for PostgreSQL and Redis).
 - **Quality Gates:** Strict code coverage validation enforced via **JaCoCo** ($\ge 85\%$) preventing failing builds from reaching production.

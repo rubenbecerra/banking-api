@@ -4,6 +4,7 @@ import com.banking.accounts.application.usecase.CreateAccountPort;
 import com.banking.accounts.application.usecase.DeleteAccountPort;
 import com.banking.accounts.application.usecase.GetAccountsPort;
 import com.banking.accounts.domain.model.Account;
+import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -39,7 +40,7 @@ public class AccountController {
 
     @PostMapping("/admin")
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<AccountDTO> createAccountForCustomer(@RequestBody AdminAccountCreationRequest request) {
+    public ResponseEntity<AccountDTO> createAccountForCustomer(@Valid @RequestBody AdminAccountCreationRequest request) {
         String ownerEmail = request.ownerEmail();
         BigDecimal balance = request.initialBalance();
         Account createdAccount = createAccountPort.execute(ownerEmail,balance);

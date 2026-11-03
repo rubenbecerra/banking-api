@@ -37,6 +37,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 )
 class CustomerIntegrationTest extends AbstractTestcontainersTest {
 
+    private static final String PASSWORD = "Password123!";
+
     @LocalServerPort
     private int port;
 
@@ -91,6 +93,25 @@ class CustomerIntegrationTest extends AbstractTestcontainersTest {
         assertThat(response.getStatusCode().value()).isEqualTo(200);
         assertThat(customerRepository.existsCustomerByEmail(email)).isTrue();
     }
+
+    @Test
+    @DisplayName("Must reject passwords shorter than 8 characters")
+    void shouldRejectShortPassword() {
+        String email = "short-" + UUID.randomUUID() + "@example.com";
+        CustomerRegistrationRequest request = new CustomerRegistrationRequest(
+                "Short", email, 25, "Male", "1234567");
+
+        assertThatThrownBy(() -> restClient.post()
+                .uri("/api/v1/customers")
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(request)
+                .retrieve()
+                .toBodilessEntity())
+                .isInstanceOf(HttpClientErrorException.BadRequest.class);
+
+        assertThat(customerRepository.existsCustomerByEmail(email)).isFalse();
+    }
+
     @Test
     @DisplayName("Must retrieve all the customers")
     void shouldGetAllCustomers() {
@@ -103,7 +124,7 @@ class CustomerIntegrationTest extends AbstractTestcontainersTest {
                 email1,
                 25,
                 "MALE",
-                passwordEncoder.encode("123"),
+                passwordEncoder.encode(PASSWORD),
                 Role.ROLE_ADMIN
         );
         customerRepository.save(admin);
@@ -114,12 +135,12 @@ class CustomerIntegrationTest extends AbstractTestcontainersTest {
                 email2,
                 29,
                 "MALE",
-                "1234"
+                PASSWORD
         );
 
         AuthenticationRequest authReq = new AuthenticationRequest(
                 email1,
-                "123"
+                PASSWORD
         );
 
         ResponseEntity<Void> loginResponse = restClient.post()
@@ -163,7 +184,7 @@ class CustomerIntegrationTest extends AbstractTestcontainersTest {
                 email1,
                 25,
                 "MALE",
-                "123"
+                PASSWORD
         );
 
         CustomerRegistrationRequest request2 = new CustomerRegistrationRequest(
@@ -171,7 +192,7 @@ class CustomerIntegrationTest extends AbstractTestcontainersTest {
                 email2,
                 29,
                 "MALE",
-                "1234"
+                PASSWORD
         );
 
         restClient.post()
@@ -183,7 +204,7 @@ class CustomerIntegrationTest extends AbstractTestcontainersTest {
 
         AuthenticationRequest authReq = new AuthenticationRequest(
                 email1,
-                "123"
+                PASSWORD
         );
         ResponseEntity<Void> loginResponse = restClient.post()
                 .uri("api/v1/auth/login")
@@ -224,14 +245,14 @@ class CustomerIntegrationTest extends AbstractTestcontainersTest {
                 email1,
                 26,
                 "FEMALE",
-                "123"
+                PASSWORD
         );
         CustomerRegistrationRequest request2 = new CustomerRegistrationRequest(
                 "user2",
                 email2,
                 28,
                 "MALE",
-                "1234"
+                PASSWORD
         );
 
         restClient.post()
@@ -243,7 +264,7 @@ class CustomerIntegrationTest extends AbstractTestcontainersTest {
 
         AuthenticationRequest authReq = new AuthenticationRequest(
                 email1,
-                "123"
+                PASSWORD
         );
         ResponseEntity<Void> loginResponse = restClient.post()
                 .uri("api/v1/auth/login")
@@ -286,7 +307,7 @@ class CustomerIntegrationTest extends AbstractTestcontainersTest {
                 email,
                 24,
                 "MALE",
-                "123"
+                PASSWORD
         );
         restClient.post()
                 .uri("api/v1/customers")
@@ -297,7 +318,7 @@ class CustomerIntegrationTest extends AbstractTestcontainersTest {
 
         AuthenticationRequest authReq = new AuthenticationRequest(
                 email,
-                "123"
+                PASSWORD
         );
         ResponseEntity<Void> loginResponse = restClient.post()
                 .uri("api/v1/auth/login")

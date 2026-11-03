@@ -17,12 +17,14 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.*;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
 
 import java.math.BigDecimal;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @SpringBootTest(
         classes = Main.class,
@@ -97,6 +99,23 @@ public class AccountIntegrationTest extends AbstractTestContainers {
         assertThat(response.getBody()).isNotNull();
         assertThat(response.getBody().owner()).isEqualTo(targetEmail);
         assertThat(response.getBody().balance()).isEqualByComparingTo(amount);
+    }
+
+    @Test
+    @DisplayName("Must reject a negative initial balance")
+    void shouldRejectNegativeInitialBalance() {
+        String token = jwtUtil.generateTestToken("admin@gmail.com", List.of("ROLE_ADMIN"));
+        AdminAccountCreationRequest request =
+                new AdminAccountCreationRequest("user@test.com", BigDecimal.valueOf(-1));
+
+        assertThatThrownBy(() -> restClient.post()
+                .uri("/api/v1/accounts/admin")
+                .header(HttpHeaders.COOKIE, "accessToken=" + token)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(request)
+                .retrieve()
+                .toBodilessEntity())
+                .isInstanceOf(HttpClientErrorException.BadRequest.class);
     }
 
     @Test

@@ -19,10 +19,12 @@ import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.utility.DockerImageName;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
 
 /**
  * Dedicated context and Redis instance: cache state and the other integration tests
@@ -94,9 +96,11 @@ class CustomerCacheIntegrationTest {
                 .extracting(Customer::getEmail)
                 .contains(email);
 
-        // The update use case must evict the affected entries.
+        // The update use case must evict the affected entries. Redis eviction is
+        // asynchronous, so wait briefly for the entry to disappear.
         updateCustomerPort.updateByEmail(email, "Updated", 31, "MALE");
-        assertThat(cacheManager.getCache("customer_by_email").get(email)).isNull();
+        await().atMost(Duration.ofSeconds(2)).untilAsserted(() ->
+                assertThat(cacheManager.getCache("customer_by_email").get(email)).isNull());
 
         Customer refreshedRead = getCustomerPort.getCustomerByEmail(email);
         assertThat(refreshedRead.getName()).isEqualTo("Updated");

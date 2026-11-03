@@ -903,4 +903,50 @@ public class TransactionIntegrationTest extends AbstractTestContainers {
         assertThat(accountRepository.findByIban(account.getIban()).orElseThrow().getBalance())
                 .isEqualByComparingTo(BigDecimal.ZERO);
     }
+
+    @Test
+    @DisplayName("Must reject page sizes above 100")
+    void shouldRejectOversizedPage() {
+        String email = "page-limit@bank.com";
+        String token = jwtUtil.generateTestToken(email, List.of("ROLE_USER"));
+        Account account = createAccountPort.execute(email, BigDecimal.ZERO);
+
+        assertThatThrownBy(() -> restClient.get()
+                .uri("/api/v1/transactions/movements/{iban}?page=0&size=101", account.getIban())
+                .header(HttpHeaders.COOKIE, "accessToken=" + token)
+                .retrieve()
+                .toBodilessEntity())
+                .isInstanceOf(HttpClientErrorException.BadRequest.class);
+    }
+
+    @Test
+    @DisplayName("Must reject unsupported sort fields")
+    void shouldRejectUnsupportedSortField() {
+        String email = "sort-limit@bank.com";
+        String token = jwtUtil.generateTestToken(email, List.of("ROLE_USER"));
+        Account account = createAccountPort.execute(email, BigDecimal.ZERO);
+
+        assertThatThrownBy(() -> restClient.get()
+                .uri("/api/v1/transactions/movements/{iban}?page=0&size=10&sort=notAField", account.getIban())
+                .header(HttpHeaders.COOKIE, "accessToken=" + token)
+                .retrieve()
+                .toBodilessEntity())
+                .isInstanceOf(HttpClientErrorException.BadRequest.class);
+    }
+
+    @Test
+    @DisplayName("Must reject invalid IBAN format")
+    void shouldRejectInvalidIban() {
+        String email = "invalid-iban@bank.com";
+        String token = jwtUtil.generateTestToken(email, List.of("ROLE_USER"));
+
+        assertThatThrownBy(() -> restClient.post()
+                .uri("/api/v1/transactions/deposit")
+                .header(HttpHeaders.COOKIE, "accessToken=" + token)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(new DepositRequest("not-an-iban", BigDecimal.ONE))
+                .retrieve()
+                .toBodilessEntity())
+                .isInstanceOf(HttpClientErrorException.BadRequest.class);
+    }
 }
