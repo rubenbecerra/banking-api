@@ -15,7 +15,8 @@ public class CachedRegisterCustomerUseCaseDecorator implements RegisterCustomerP
     @Override
     @Caching(evict = {
             @CacheEvict(value = "customers", allEntries = true),
-            @CacheEvict(value = "customer_by_email", allEntries = true)
+            @CacheEvict(value = "customer_by_email", allEntries = true),
+            @CacheEvict(value = "customer_by_id", allEntries = true)
     })
     public void execute(String name, String email, Integer age, String gender, String rawPassword) {
         target.execute(name,email,age,gender,rawPassword);

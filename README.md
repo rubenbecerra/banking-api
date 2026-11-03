@@ -59,6 +59,18 @@ To guarantee data safety, consistency, and protection against accidental request
 
 ---
 
+## 🧠 Caching Strategy
+
+Customer reads are cached in Redis through application-layer decorators, keeping the use cases free of caching concerns:
+
+- `customer_by_email` and `customer_by_id` cache individual lookups.
+- `customers` caches the full customer list.
+- Entries expire after 30 minutes (configured in `RedisConfig`).
+- Register, update and delete use cases evict the affected entries, so a write is visible on the next read.
+- **Resilience:** if Redis is unavailable, `LoggingCacheErrorHandler` logs a warning and reads fall back to PostgreSQL. Writes are not blocked; a failed eviction may leave an entry stale until its TTL expires.
+
+---
+
 ## 🚀 Local Deployment with Docker Compose
 
 The complete architecture (API, PostgreSQL 16, and Redis 7) runs containerized out-of-the-box via Docker Compose:

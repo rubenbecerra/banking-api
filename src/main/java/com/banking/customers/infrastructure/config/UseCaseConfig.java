@@ -3,9 +3,17 @@ package com.banking.customers.infrastructure.config;
 
 import com.banking.auth.application.AuthenticationUseCase;
 import com.banking.auth.infrastructure.security.RedisTokenRepository;
+import com.banking.customers.application.decorator.CachedDeleteCustomerUseCaseDecorator;
+import com.banking.customers.application.decorator.CachedGetCustomerUseCaseDecorator;
+import com.banking.customers.application.decorator.CachedRegisterCustomerUseCaseDecorator;
+import com.banking.customers.application.decorator.CachedUpdateCustomerUseCaseDecorator;
+import com.banking.customers.application.usecase.DeleteCustomerPort;
 import com.banking.customers.application.usecase.DeleteCustomerUseCase;
+import com.banking.customers.application.usecase.GetCustomerPort;
 import com.banking.customers.application.usecase.GetCustomerUseCase;
+import com.banking.customers.application.usecase.RegisterCustomerPort;
 import com.banking.customers.application.usecase.RegisterCustomerUseCase;
+import com.banking.customers.application.usecase.UpdateCustomerPort;
 import com.banking.customers.application.usecase.UpdateCustomerUseCase;
 import com.banking.customers.domain.repository.CustomerRepository;
 import com.banking.shared.security.JWTUtil;
@@ -19,23 +27,28 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 public class UseCaseConfig {
 
     @Bean
-    public DeleteCustomerUseCase deleteCustomerUseCase(CustomerRepository customerRepository) {
-        return new DeleteCustomerUseCase(customerRepository);
+    public DeleteCustomerPort deleteCustomerPort(CustomerRepository customerRepository) {
+        return new CachedDeleteCustomerUseCaseDecorator(
+                new DeleteCustomerUseCase(customerRepository));
     }
 
     @Bean
-    public RegisterCustomerUseCase registerCustomerUseCase(CustomerRepository customerRepository, PasswordEncoder passwordEncoder) {
-        return new RegisterCustomerUseCase(customerRepository, passwordEncoder);
+    public RegisterCustomerPort registerCustomerPort(CustomerRepository customerRepository,
+                                                     PasswordEncoder passwordEncoder) {
+        return new CachedRegisterCustomerUseCaseDecorator(
+                new RegisterCustomerUseCase(customerRepository, passwordEncoder));
     }
 
     @Bean
-    public GetCustomerUseCase getCustomerUseCase(CustomerRepository customerRepository) {
-        return new GetCustomerUseCase(customerRepository);
+    public GetCustomerPort getCustomerPort(CustomerRepository customerRepository) {
+        return new CachedGetCustomerUseCaseDecorator(
+                new GetCustomerUseCase(customerRepository));
     }
 
     @Bean
-    public UpdateCustomerUseCase updateCustomerUseCase(CustomerRepository customerRepository) {
-        return new UpdateCustomerUseCase(customerRepository);
+    public UpdateCustomerPort updateCustomerPort(CustomerRepository customerRepository) {
+        return new CachedUpdateCustomerUseCaseDecorator(
+                new UpdateCustomerUseCase(customerRepository));
     }
 
     @Bean

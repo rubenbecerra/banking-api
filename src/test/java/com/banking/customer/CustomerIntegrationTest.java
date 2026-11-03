@@ -16,6 +16,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.cache.CacheManager;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -46,6 +47,9 @@ class CustomerIntegrationTest extends AbstractTestcontainersTest {
     @Autowired
     private PasswordEncoder passwordEncoder;
 
+    @Autowired
+    private CacheManager cacheManager;
+
     @BeforeEach
     void setUp() {
         restClient = RestClient.builder()
@@ -53,6 +57,16 @@ class CustomerIntegrationTest extends AbstractTestcontainersTest {
                 .build();
 
         customerRepository.deleteAll();
+        clearCaches();
+    }
+
+    private void clearCaches() {
+        for (String name : List.of("customers", "customer_by_email", "customer_by_id")) {
+            var cache = cacheManager.getCache(name);
+            if (cache != null) {
+                cache.clear();
+            }
+        }
     }
 
     @Test

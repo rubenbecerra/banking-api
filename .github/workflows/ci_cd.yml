@@ -116,4 +116,4 @@ jobs:
 
       - name: Run Docker Compose on Remote Server
         run: |
-          ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }} "cd ~/app && docker pull ghcr.io/${{ github.repository }}:latest && docker compose down && docker compose up -d --build && docker image prune -f"
+          ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_IP }} "cd ~/app && docker pull ghcr.io/${{ github.repository }}:latest && docker compose down && docker compose up -d --build && docker image prune -f")

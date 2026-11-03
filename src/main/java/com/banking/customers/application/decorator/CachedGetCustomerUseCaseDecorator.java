@@ -4,6 +4,7 @@ import com.banking.customers.application.usecase.GetCustomerPort;
 import com.banking.customers.domain.model.Customer;
 import org.springframework.cache.annotation.Cacheable;
 
+import java.util.ArrayList;
 import java.util.List;
 
 public class CachedGetCustomerUseCaseDecorator implements GetCustomerPort {
@@ -14,18 +15,19 @@ public class CachedGetCustomerUseCaseDecorator implements GetCustomerPort {
         this.target = target;
     }
     @Override
+    @Cacheable(value = "customers")
     public List<Customer> getAllCustomers() {
-        return target.getAllCustomers();
+        return new ArrayList<>(target.getAllCustomers());
     }
 
     @Override
-    @Cacheable(value = "customer_by_email", key = "#email")
-
+    @Cacheable(value = "customer_by_email", key = "#p0")
     public Customer getCustomerByEmail(String email) {
         return target.getCustomerByEmail(email);
     }
 
     @Override
+    @Cacheable(value = "customer_by_id", key = "#p0")
     public Customer getCustomerById(Integer id) {
         return target.getCustomerById(id);
     }

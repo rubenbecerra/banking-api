@@ -15,7 +15,8 @@ public class CachedDeleteCustomerUseCaseDecorator implements DeleteCustomerPort 
     @Override
     @Caching(evict = {
             @CacheEvict(value = "customers", allEntries = true),
-            @CacheEvict(value = "customer_by_email", allEntries = true)
+            @CacheEvict(value = "customer_by_email", allEntries = true),
+            @CacheEvict(value = "customer_by_id", key = "#p0")
     })
     public void deleteById(Integer id) {
         target.deleteById(id);
@@ -24,7 +25,8 @@ public class CachedDeleteCustomerUseCaseDecorator implements DeleteCustomerPort 
     @Override
     @Caching(evict = {
             @CacheEvict(value = "customers", allEntries = true),
-            @CacheEvict(value = "customer_by_email", allEntries = true)
+            @CacheEvict(value = "customer_by_email", key = "#p0"),
+            @CacheEvict(value = "customer_by_id", allEntries = true)
     })
     public void deleteByEmail(String email) {
         target.deleteByEmail(email);

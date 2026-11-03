@@ -16,7 +16,8 @@ public class CachedUpdateCustomerUseCaseDecorator implements UpdateCustomerPort 
     @Transactional
     @Caching(evict = {
             @CacheEvict(value = "customers", allEntries = true),
-            @CacheEvict(value = "customer_by_email", allEntries = true)
+            @CacheEvict(value = "customer_by_email", allEntries = true),
+            @CacheEvict(value = "customer_by_id", allEntries = true)
     })
     public void update(Integer id, String name, Integer age, String gender) {
         target.update(id,name,age,gender);
@@ -26,7 +27,8 @@ public class CachedUpdateCustomerUseCaseDecorator implements UpdateCustomerPort 
     @Transactional
     @Caching(evict = {
             @CacheEvict(value = "customers", allEntries = true),
-            @CacheEvict(value = "customer_by_email", key = "#email")
+            @CacheEvict(value = "customer_by_email", key = "#p0"),
+            @CacheEvict(value = "customer_by_id", allEntries = true)
     })
     public void updateByEmail(String email, String name, Integer age, String gender) {
         target.updateByEmail(email,name,age,gender);
