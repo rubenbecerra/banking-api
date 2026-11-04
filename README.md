@@ -1,190 +1,179 @@
-# 🏦 Banking Core API (Production-Ready Architecture)
+# Banking API — Core Banking REST API
 
-![CI/CD Pipeline](https://github.com/Rubenbc-lab/banking-api/actions/workflows/ci.yml/badge.svg)
+![CI](https://github.com/rubenbecerra/banking-api/actions/workflows/ci_cd.yml/badge.svg)
 ![Java 21](https://img.shields.io/badge/Java-21-orange?logo=openjdk)
 ![Spring Boot 4](https://img.shields.io/badge/Spring%20Boot-4.x-brightgreen?logo=springboot)
-![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-blue?logo=postgresql)
-![Redis](https://img.shields.io/badge/Redis-7-red?logo=redis)
-![Docker](https://img.shields.io/badge/Docker-GHCR-2496ED?logo=docker)
-![JaCoCo](https://img.shields.io/badge/Coverage-85%25%2B-green)
+![PostgreSQL 16](https://img.shields.io/badge/PostgreSQL-16-blue?logo=postgresql)
+![Redis 7](https://img.shields.io/badge/Redis-7-red?logo=redis)
+![Coverage](https://img.shields.io/badge/Coverage-87%25-green)
 
-A production-grade core banking RESTful API built with **Spring Boot 4** and **Java 21**. This project serves as an enterprise financial engine implementing **Clean Architecture**, secure authentication via **HttpOnly Cookies + JWT**, advanced transaction management with **Transaction Templates**, high-performance caching & **Idempotency** via **Redis**, robust database migrations with **Flyway**, automated integration testing with **Testcontainers**, and a strict **CI/CD pipeline** targeting GitHub Container Registry (GHCR).
+Java 21 · Spring Boot 4 · PostgreSQL · Redis · Docker · GitHub Actions
 
----
+A core banking REST API built to practice transactional correctness: accounts, deposits,
+withdrawals, transfers and transaction history, with JWT/RBAC security, Redis-backed idempotency
+and pessimistic locking.
 
-## 🎯 Project Objective & Scope
-
-The goal of this project is to implement an enterprise-standard backend architecture ready for high-concurrency financial workloads:
-- **Clean Architecture:** Strict domain-centric separation of concerns (Domain, Application, Infrastructure, and Presentation layers) ensuring high maintainability and testability.
-- **Secure Authentication Model:** Advanced security flow using stateless **JWT stored in secure HttpOnly Cookies** combined with **BCrypt password hashing** to prevent XSS and CSRF vulnerabilities.
-- **Consistent errors:** Missing, malformed or expired JWTs are rejected with `401 Unauthorized` and a JSON body before the request reaches the controllers.
-- **Input validation:** Bean Validation on auth, customer and transaction DTOs, Spanish IBAN format, amount precision, page-size limits, sort-field whitelist and password length.
-- **Transactional Consistency & Idempotency:** Explicit transaction management and idempotency guards to safely handle financial operations (Deposits, Withdrawals, Transfers) and prevent duplicate processing.
-- **Resilient Testing Strategy:** Elimination of in-memory mocks (H2) in favor of real, isolated runtime dependencies (**Testcontainers** for PostgreSQL and Redis).
-- **Quality Gates:** Strict code coverage validation enforced via **JaCoCo** ($\ge 85\%$) preventing failing builds from reaching production.
-- **Automated Delivery (DevOps):** End-to-end continuous integration and deployment pipeline that builds, tests, verifies coverage, and publishes production-ready multi-stage Docker images to **GHCR**.
-- **Observability:** Health checks, liveness/readiness probes, and telemetry endpoints via **Spring Boot Actuator**.
+> **Reference implementation, not production software.** Known limitations are documented below.
 
 ---
 
-## 🛠️ Tech Stack
-
-- **Core:** Java 21 (LTS), Spring Boot 4
-- **Architecture Pattern:** Clean Architecture (Domain-Centric / Hexagonal approach)
-- **Data Persistence:** Spring Data JPA, Hibernate, PostgreSQL 16
-- **Database Versioning:** Flyway (Versioned SQL migrations)
-- **Caching & Idempotency Layer:** Redis 7 / Lettuce
-- **Security:** Spring Security 7, JJWT (HMAC-SHA256), HttpOnly Cookies
-- **Testing:** JUnit 5, AssertJ, Mockito, Testcontainers (PostgreSQL & Redis)
-- **Code Coverage:** JaCoCo (Enforced minimum threshold: 85%)
-- **Observability:** Spring Boot Actuator
-- **Containerization & CI/CD:** Docker (Multi-stage build), Docker Compose, GitHub Actions, GHCR
-
----
-
-## 📦 Project Structure
-
-The project is structured following strict modular boundaries separating account management, authentication, and core banking transactions:
-- **`com.banking.accounts`**: Handles account creation, states, and balance queries.
-- **`com.banking.customer`**: Manages customer profiles, registration, and credentials.
-- **`com.banking.transactions`**: Implements deposit, withdrawal, and transfer workflows with strict transaction isolation.
-- **`com.banking.shared`**: Houses cross-cutting concerns including security filters, JWT handling, global exception management, and Redis connectivity.
-- **`com.banking.auth`**: Manages the authentication control (register/login) ensuring correct implementation.
-
----
-
-## ⚡ Financial Idempotency & Transactions
-
-To guarantee data safety, consistency, and protection against accidental request retries over faulty networks:
-- **Idempotency Interceptors & Templates:** Intercepts state-changing operations using unique client request keys saved in Redis, safely rejecting duplicate executions.
-- **User-scoped keys:** Redis keys combine the operation, the authenticated user and the client key, so a key cannot return another user's response.
-- **Key validation:** `X-Idempotency-Key` must be 8–128 characters using letters, digits, `.`, `_`, `:` or `-`; invalid keys are rejected with `400 Bad Request`.
-- **Transactional Templates:** Ensures atomic boundaries across complex financial transfers, ensuring proper rollback behavior if any consistency check fails.
-
----
-
-## 🧠 Caching Strategy
-
-Customer reads are cached in Redis through application-layer decorators, keeping the use cases free of caching concerns:
-
-- `customer_by_email` and `customer_by_id` cache individual lookups.
-- `customers` caches the full customer list.
-- Entries expire after 30 minutes (configured in `RedisConfig`).
-- Register, update and delete use cases evict the affected entries, so a write is visible on the next read.
-- **Resilience:** if Redis is unavailable, `LoggingCacheErrorHandler` logs a warning and reads fall back to PostgreSQL. Writes are not blocked; a failed eviction may leave an entry stale until its TTL expires.
-
----
-
-## 🧪 Testing & Quality Gates
+## Quick start
 
 ```bash
-./mvnw verify
+cp .env.example .env
+docker compose up --build -d
 ```
 
-- Unit tests with JUnit 5, AssertJ and Mockito.
-- Integration tests with **Testcontainers** (PostgreSQL 16 and Redis 7), including concurrency and idempotency scenarios.
-- **JaCoCo enforces a minimum of 85% instruction coverage**; the build fails below that threshold.
-- The HTML report is generated at `target/site/jacoco/index.html`.
-- CI runs `./mvnw -B clean verify` and uploads the coverage report as a build artifact.
+API: `http://localhost:8081`  
+Swagger: `http://localhost:8081/swagger-ui.html`
+
+Local demo admin: `admin@bank.com` / `Admin123!` (local only; change it before any real deployment).
 
 ---
 
-## 🚀 Local Deployment with Docker Compose
+## What it does
 
-The complete architecture (API, PostgreSQL 16, and Redis 7) runs containerized out-of-the-box via Docker Compose:
+- 24 REST endpoints for customers, accounts, deposits, withdrawals, transfers and history.
+- JWT authentication in HttpOnly/SameSite=Strict cookies, BCrypt and RBAC.
+- Redis-backed idempotency scoped per user and operation.
+- Pessimistic locking in IBAN order to prevent deadlocks and lost updates.
+- Flyway migrations, Bean Validation, OpenAPI/Swagger and Actuator.
+- Integration tests against real PostgreSQL and Redis with Testcontainers.
 
-1. Clone the repository.
-2. Create your local environment file and fill in the values:
-   ```bash
-   cp .env.example .env
-   ```
-3. Build and spin up all services locally in detached mode:
-   ```bash
-   docker compose up --build -d
-   ```
+### API surface
 
-### 🔐 Environment Variables
-
-Credentials are injected through environment variables; no secrets are committed to the repository. `.env` is git-ignored and `.env.example` documents every required key.
-
-| Variable | Description |
+| Area | Endpoints |
 |---|---|
-| `DB_NAME` | PostgreSQL database name (default: `accounts`) |
-| `DB_USERNAME` | PostgreSQL user (default: `postgres`) |
-| `DB_PASSWORD` | PostgreSQL password |
-| `DB_URL` | JDBC URL used when running the API outside Docker |
-| `JWT_SECRET` | HMAC-SHA256 signing key, **at least 32 characters** |
-| `REDIS_HOST` | Redis host when running outside Docker (default: `localhost`) |
-| `REDIS_PORT` | Redis port when running outside Docker (default: `6379`) |
-| `GRAFANA_ADMIN_USER` | Grafana admin user |
-| `GRAFANA_ADMIN_PASSWORD` | Grafana admin password |
+| Auth | `POST /api/v1/auth/login`, `/refresh`, `/logout` |
+| Customers | `POST /api/v1/customers`, `GET /api/v1/customers`, `GET /{id}`, `GET /me`, `PUT /{id}`, `PUT /me`, `DELETE /{id}`, `DELETE /me` |
+| Accounts | `POST /api/v1/accounts/me`, `POST /admin`, `GET /me`, `GET /admin`, `DELETE /{iban}`, `DELETE /admin/{iban}` |
+| Transactions | `POST /deposit`, `/withdraw`, `/transfer`, `/admin/deposit`, `/admin/withdraw`, `GET /movements/{iban}`, `GET /admin/movements/{iban}` |
 
-Generate a strong JWT secret with:
+---
 
-```bash
-openssl rand -hex 32
+## Stack
+
+- Java 21, Spring Boot 4, Spring Security, Spring Data JPA/Hibernate
+- PostgreSQL 16, Redis 7, Flyway
+- JUnit 5, AssertJ, Mockito, Testcontainers
+- Docker, Docker Compose, GitHub Actions, GHCR
+- Prometheus, Grafana
+
+---
+
+## Architecture
+
+```mermaid
+flowchart TD
+    A[Client] --> B[Security filter chain]
+    B --> C[REST controllers]
+    C --> D[Use cases]
+    D --> E[Domain ports]
+    E --> F[Repository adapters]
+    F --> G[(PostgreSQL)]
+    D --> H[(Redis: cache / idempotency)]
 ```
 
-To run the API locally without Docker, Spring Boot reads the same `.env` file automatically (`spring.config.import` is already configured in `application.properties`). Activate the `dev` profile to get SQL logging and detailed errors:
+Clean/Hexagonal boundaries: the domain has no Spring, the application layer orchestrates use
+cases, and the infrastructure layer implements adapters.
+
+### Project structure
+
+- `com.banking.accounts` — account creation, states and balance queries.
+- `com.banking.customers` — customer profiles, registration and credentials.
+- `com.banking.transactions` — deposits, withdrawals and transfers.
+- `com.banking.auth` — login, refresh and logout.
+- `com.banking.shared` — security filters, JWT, exception handling and Redis.
+
+---
+
+## Key decisions
+
+| Decision | Why | Trade-off |
+|---|---|---|
+| JWT in HttpOnly cookies with `SameSite=Strict` | Reduces token theft via XSS; SameSite mitigates CSRF | CSRF token is the next hardening step |
+| Redis-backed idempotency, scoped per user | Safe retries on network failures | Not atomic with the database commit (see limitations) |
+| Pessimistic locking in IBAN order | Prevents lost updates and A→B/B→A deadlocks | Hot accounts serialize; optimistic locking is a future comparison |
+| Explicit transactions with `TransactionTemplate` | Transaction boundaries are visible | More wiring than `@Transactional` |
+| Cache-aside with fallback | Reads survive Redis outages | A failed eviction can leave stale data until TTL |
+| Testcontainers instead of H2 | Tests run against real PostgreSQL and Redis | Slower CI, requires Docker |
+
+---
+
+## Tests and quality
+
+```bash
+./mvnw clean verify
+```
+
+- **75 tests**, 0 failures.
+- **87.21% instruction coverage**, **90.25% line coverage**, **60.44% branch coverage**.
+- Integration tests with **Testcontainers** against PostgreSQL 16 and Redis 7.
+- CI enforces the **85% instruction coverage** gate.
+- JaCoCo report: `target/site/jacoco/index.html`.
+
+---
+
+## Run locally
+
+```bash
+cp .env.example .env
+docker compose up --build -d
+```
+
+Required variables (see `.env.example`):
+
+- `DB_NAME`, `DB_USERNAME`, `DB_PASSWORD`
+- `JWT_SECRET` (at least 32 characters)
+- `REDIS_HOST`, `REDIS_PORT`
+- `COOKIE_SECURE` (`false` locally, `true` behind HTTPS)
+
+Run without Docker:
 
 ```bash
 SPRING_PROFILES_ACTIVE=dev ./mvnw spring-boot:run
 ```
 
-On Windows PowerShell:
+Windows PowerShell:
 
 ```powershell
 $env:SPRING_PROFILES_ACTIVE="dev"; .\mvnw.cmd spring-boot:run
 ```
 
-### 🧭 Profiles
+### Profiles
 
-| Profile | Used by | Behavior |
-|---|---|---|
-| `dev` | Local development | SQL logging, stack traces and full Actuator health details |
-| `prod` | Docker Compose / deployment | No SQL logging, no stack traces, Actuator limited to `health`, `info` and `prometheus` |
-
-Docker Compose sets `SPRING_PROFILES_ACTIVE=prod` explicitly. If no profile is active, `application.properties` provides production-safe defaults (no stack traces, no SQL logging, limited Actuator).
-
-### 🔑 Demo Credentials
-
-The Flyway migrations seed an administrator account:
-
-| Email | Password |
+| Profile | Behavior |
 |---|---|
-| `admin@bank.com` | `Admin123!` |
+| `dev` | SQL logging, stack traces, full Actuator health |
+| `prod` | No SQL logging, no stack traces, limited Actuator |
 
-These credentials are for local/demo purposes only. Change the password before deploying to a real environment.
+---
 
-#### GitHub Actions secrets for deployment
+## Known limitations
 
-The CD job writes `~/app/.env` on the target server from these repository secrets:
+- **Redis idempotency is not atomic with the database commit.** A Redis failure after the commit
+  can delete the key and allow a retry to duplicate the operation. The next step is a
+  database-backed idempotency key written in the same transaction as the money movement.
+- **Branch coverage is 60.44%.** Happy paths are covered; security error paths and cache
+  fallbacks are the next target.
+- **No rate limiting on authentication endpoints.** Add Redis/Bucket4j throttling and account
+  lockout before exposing login publicly.
+- **No load test or p95/p99 measurement yet.** Add k6/Gatling before claiming throughput.
+- **Cookie `Secure` flag defaults to false for local HTTP.** Set `COOKIE_SECURE=true` in production.
+- **Pessimistic locking only on `accounts`.** Optimistic `@Version` is a future comparison.
 
-- `DB_PASSWORD`
-- `JWT_SECRET`
-- `GRAFANA_ADMIN_USER`
-- `GRAFANA_ADMIN_PASSWORD`
+---
 
-Existing deployment secrets (`TS_AUTHKEY`, `SSH_PRIVATE_KEY`, `SERVER_IP`, `SERVER_USER`) are unchanged.
+## Roadmap
 
-> If any credential was ever committed to the repository, rotate it. Removing it from the current files does not remove it from the Git history.
+1. Database-backed idempotency (same transaction as the money movement).
+2. Transactional outbox + relay for events.
+3. Rate limiting on auth + CSRF token.
+4. k6 load test with p95/p99.
+5. Reconciliation job (`sum(entries) == balance`).
 
-## 🏛️ Architecture Overview
+---
 
-```text
-[ Client Requests ]
-        │
-        ▼
-[ Presentation Layer ] ──── (REST Controllers / DTOs / Mappers)
-        │
-        ▼
-[ Security Filter Chain ] ─ (JWT Verification via HttpOnly Cookies)
-        │
-        ▼
-[ Application Layer ] ───── (Use Cases / Business Orchestration / Decorators)
-        │
-        ▼
-[ Domain Layer ] ────────── (Pure Business Entities / Domain Rules / Repository Ports)
-        │
-        ▼
-[ Infrastructure Layer ] ── (Spring Data JPA / PostgreSQL / Redis / Idempotency / Config)
+## Repository
+
+`github.com/rubenbecerra/banking-api`

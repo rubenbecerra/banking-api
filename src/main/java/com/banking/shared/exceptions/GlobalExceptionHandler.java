@@ -2,6 +2,8 @@ package com.banking.shared.exceptions;
 
 import com.banking.shared.exceptions.exception.AccountNotFoundException;
 import com.banking.shared.exceptions.exception.UnauthorizedActionException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -18,6 +20,8 @@ import java.util.NoSuchElementException;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<Map<String, Object>> handleValidationExceptions(MethodArgumentNotValidException ex) {
@@ -86,8 +90,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Map<String, Object>> handleGlobalException(Exception ex) {
-        System.err.println("=== 500 ERROR ===");
-        ex.printStackTrace();
+        log.error("Unhandled exception", ex);
 
         Map<String, Object> body = buildErrorResponse(
                 HttpStatus.INTERNAL_SERVER_ERROR.value(),
