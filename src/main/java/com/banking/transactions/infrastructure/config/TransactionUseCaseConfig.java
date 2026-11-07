@@ -1,6 +1,8 @@
 package com.banking.transactions.infrastructure.config;
 
 import com.banking.accounts.domain.repository.AccountRepository;
+import com.banking.ledger.domain.repository.LedgerEntryRepository;
+import com.banking.ledger.domain.repository.MovementRepository;
 import com.banking.shared.infrastructure.idempotency.IdempotencyTemplate;
 import com.banking.shared.infrastructure.redis.IdempotencyRepository;
 import com.banking.transactions.application.decorator.idempotency.DepositUseCaseIdempotencyDecorator;
@@ -57,10 +59,13 @@ public class TransactionUseCaseConfig {
     @Bean
     public TransferMoneyPort transferMoneyPort(TransactionRepository txRepo,
                                                AccountRepository accRepo,
+                                               MovementRepository movementRepository,
+                                               LedgerEntryRepository ledgerEntryRepository,
                                                TransactionTemplate transactionTemplate,
                                                IdempotencyTemplate idempotencyTemplate) {
 
-        TransferMoneyUseCase useCase = new TransferMoneyUseCase(txRepo, accRepo);
+        TransferMoneyUseCase useCase = new TransferMoneyUseCase(txRepo, accRepo,
+                movementRepository, ledgerEntryRepository );
         TransferMoneyUseCaseTransactionalDecorator transactionalDecorator =
                 new TransferMoneyUseCaseTransactionalDecorator(useCase, transactionTemplate);
 

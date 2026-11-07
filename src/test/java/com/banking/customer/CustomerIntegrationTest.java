@@ -1,5 +1,6 @@
 package com.banking.customer;
 
+import com.banking.AbstractTestcontainersTest;
 import com.banking.Main;
 import com.banking.auth.infrastructure.rest.AuthenticationRequest;
 import com.banking.auth.infrastructure.rest.AuthenticationResponse;

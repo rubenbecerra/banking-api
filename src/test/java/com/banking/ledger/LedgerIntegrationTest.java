@@ -1,6 +1,6 @@
 package com.banking.ledger;
 
-import com.banking.AbstractTestContainers;
+import com.banking.customer.AbstractTestContainers;
 import com.banking.ledger.domain.model.EntryDirection;
 import com.banking.ledger.domain.model.LedgerEntry;
 import com.banking.ledger.domain.model.Movement;

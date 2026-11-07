@@ -2,6 +2,7 @@ package com.banking;
 
 import com.banking.accounts.infrastructure.rest.AccountDTO;
 import com.banking.auth.infrastructure.rest.AuthenticationRequest;
+import com.banking.customer.AbstractTestContainers;
 import com.banking.customers.infrastructure.rest.CustomerRegistrationRequest;
 import com.banking.transactions.infrastructure.rest.DepositRequest;
 import com.banking.transactions.infrastructure.rest.TransactionDTO;

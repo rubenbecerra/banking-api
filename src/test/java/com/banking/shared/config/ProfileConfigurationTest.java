@@ -1,6 +1,6 @@
 package com.banking.shared.config;
 
-import com.banking.AbstractTestContainers;
+import com.banking.customer.AbstractTestContainers;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.env.Environment;

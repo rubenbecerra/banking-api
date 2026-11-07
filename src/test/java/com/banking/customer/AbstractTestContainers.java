@@ -1,4 +1,4 @@
-package com.banking;
+package com.banking.customer;
 
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;

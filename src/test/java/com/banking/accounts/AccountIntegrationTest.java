@@ -1,6 +1,6 @@
 package com.banking.accounts;
 
-import com.banking.AbstractTestContainers;
+import com.banking.customer.AbstractTestContainers;
 import com.banking.Main;
 import com.banking.accounts.application.usecase.CreateAccountPort;
 import com.banking.accounts.application.usecase.GetAccountsPort;

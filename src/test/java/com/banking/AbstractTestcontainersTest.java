@@ -1,4 +1,4 @@
-package com.banking.customer;
+package com.banking;
 
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.DynamicPropertyRegistry;

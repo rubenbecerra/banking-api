@@ -1,6 +1,6 @@
 package com.banking.transactions;
 
-import com.banking.AbstractTestContainers;
+import com.banking.customer.AbstractTestContainers;
 import com.banking.Main;
 import com.banking.accounts.domain.model.Account;
 import com.banking.accounts.application.usecase.CreateAccountPort;

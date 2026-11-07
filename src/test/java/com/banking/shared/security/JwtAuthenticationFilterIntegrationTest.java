@@ -1,6 +1,6 @@
 package com.banking.shared.security;
 
-import com.banking.AbstractTestContainers;
+import com.banking.customer.AbstractTestContainers;
 import jakarta.servlet.ServletContext;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
