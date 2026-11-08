@@ -1,5 +1,9 @@
 package com.banking.transactions.application.usecase;
 
+import com.banking.ledger.domain.model.LedgerEntry;
+import com.banking.ledger.domain.model.Movement;
+import com.banking.ledger.domain.repository.LedgerEntryRepository;
+import com.banking.ledger.domain.repository.MovementRepository;
 import com.banking.shared.exceptions.exception.AccountNotFoundException;
 import com.banking.accounts.domain.model.Account;
 import com.banking.accounts.domain.repository.AccountRepository;
@@ -8,15 +12,21 @@ import com.banking.transactions.domain.model.Transaction;
 import com.banking.transactions.domain.repository.TransactionRepository;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 public class DepositUseCase implements DepositPort {
 
     private final TransactionRepository transactionRepository;
     private final AccountRepository accountRepository;
+    private final MovementRepository movementRepository;
+    private final LedgerEntryRepository ledgerEntryRepository;
 
-    public DepositUseCase(TransactionRepository transactionRepository, AccountRepository accountRepository) {
+    public DepositUseCase(TransactionRepository transactionRepository, AccountRepository accountRepository,
+                          MovementRepository movementRepository, LedgerEntryRepository ledgerEntryRepository) {
         this.transactionRepository = transactionRepository;
         this.accountRepository = accountRepository;
+        this.movementRepository = movementRepository;
+        this.ledgerEntryRepository = ledgerEntryRepository;
     }
 
     @Override
@@ -35,6 +45,12 @@ public class DepositUseCase implements DepositPort {
         accountRepository.save(target);
         Transaction savedTransaction = transactionRepository.save(transaction);
 
+        Movement movement = movementRepository.save(Movement.createDeposit(target.getIban(), amount));
+        ledgerEntryRepository.saveAll(List.of(
+                LedgerEntry.createDebit(movement.getId(), LedgerEntry.EXTERNAL_ACCOUNT, amount),
+                LedgerEntry.createCredit(movement.getId(), target.getIban(), amount)
+        ));
+
         return OperationResult.fresh(savedTransaction);
     }
 
@@ -49,6 +65,12 @@ public class DepositUseCase implements DepositPort {
         );
         accountRepository.save(target);
         Transaction savedTransaction = transactionRepository.save(transaction);
+
+        Movement movement = movementRepository.save(Movement.createDeposit(target.getIban(), amount));
+        ledgerEntryRepository.saveAll(List.of(
+                LedgerEntry.createDebit(movement.getId(), LedgerEntry.EXTERNAL_ACCOUNT, amount),
+                LedgerEntry.createCredit(movement.getId(), target.getIban(), amount)
+        ));
 
         return OperationResult.fresh(savedTransaction);
     }

@@ -7,12 +7,11 @@ import com.banking.accounts.domain.repository.AccountRepository;
 import com.banking.ledger.domain.model.EntryDirection;
 import com.banking.ledger.domain.model.LedgerEntry;
 import com.banking.ledger.domain.model.MovementType;
-import com.banking.ledger.infrastructure.persistence.LedgerEntryEntity;
-import com.banking.ledger.infrastructure.persistence.MovementEntity;
-import com.banking.ledger.infrastructure.persistence.SpringDataLedgerEntryRepository;
-import com.banking.ledger.infrastructure.persistence.SpringDataMovementRepository;
+import com.banking.ledger.infrastructure.persistence.*;
+import com.banking.transactions.application.usecase.DepositPort;
 import com.banking.transactions.application.usecase.OperationResult;
 import com.banking.transactions.application.usecase.TransferMoneyPort;
+import com.banking.transactions.application.usecase.WithdrawPort;
 import com.banking.transactions.domain.model.Transaction;
 import com.banking.transactions.domain.model.TransactionType;
 import com.banking.transactions.domain.repository.TransactionRepository;
@@ -35,6 +34,9 @@ public class LedgerPostingIntegrationTest extends AbstractTestContainers {
     @Autowired private SpringDataLedgerEntryRepository ledgerEntryRepository;
     @Autowired private AccountRepository accountRepository;
     @Autowired private TransactionRepository transactionRepository;
+    @Autowired private DepositPort depositPort;
+    @Autowired private WithdrawPort withdrawPort;
+    @Autowired private LedgerEntryMapper ledgerEntryMapper;
 
     @BeforeEach
     void clean() {
@@ -140,5 +142,183 @@ public class LedgerPostingIntegrationTest extends AbstractTestContainers {
                 .isEqualByComparingTo("100");
         assertThat(accountRepository.findByIban(target.getIban()).orElseThrow().getBalance())
                 .isEqualByComparingTo("50");
+    }
+
+    @Test
+    @DisplayName("A Deposit should produce 1 transaction, 1 DEPOSIT movement and 2 ledger entries")
+    void depositShouldProduceTransactionMovementAndEntries() {
+        // given
+        Account target = createAccountPort.execute("receiver@gmail.com", new BigDecimal("100"));
+
+        // when
+        depositPort.deposit(target.getIban(), new BigDecimal("50"), "receiver@gmail.com");
+
+        // then
+        assertThat(transactionRepository.count()).isEqualTo(1);
+        assertThat(movementRepository.findAll().getFirst().getType()).isEqualTo(MovementType.DEPOSIT);
+        assertThat(movementRepository.count()).isEqualTo(1);
+
+        MovementEntity movement = movementRepository.findAll().getFirst();
+        assertThat(movement.getSourceIban()).isNull();
+        assertThat(movement.getTargetIban()).isEqualTo(target.getIban());
+
+        assertThat(ledgerEntryRepository.count()).isEqualTo(2);
+
+        List<LedgerEntry> entries = ledgerEntryRepository.findAll().stream()
+                .map(ledgerEntryMapper::toDomain)
+                .toList();
+
+        LedgerEntry credit = entries.stream()
+                .filter(e -> e.getDirection() == EntryDirection.CREDIT)
+                .findFirst()
+                .orElseThrow();
+        LedgerEntry debit = entries.stream()
+                .filter(e -> e.getDirection() == EntryDirection.DEBIT)
+                .findFirst()
+                .orElseThrow();
+
+        assertThat(debit.getAccountIban()).isEqualTo(LedgerEntry.EXTERNAL_ACCOUNT);
+        assertThat(credit.getAccountIban()).isEqualTo(target.getIban());
+        assertThat(debit.getAmount()).isEqualByComparingTo("50");
+        assertThat(credit.getAmount()).isEqualByComparingTo("50");
+        assertThat(debit.getMovementId()).isEqualTo(movement.getId());
+        assertThat(credit.getMovementId()).isEqualTo(movement.getId());
+        assertThat(accountRepository.findByIban(target.getIban()).orElseThrow().getBalance())
+                .isEqualByComparingTo("150.00");
+    }
+
+    @Test
+    @DisplayName("A withdraw should produce 1 Transaction, 1 Movement WITHDRAWAL and 2 entries")
+    void withdrawShouldProduceTransactionMovenemtAndEntries() {
+        // given
+        Account source = createAccountPort.execute("receiver@gmail.com", new BigDecimal("100"));
+
+        // when
+        withdrawPort.withdraw(source.getOwner(), source.getIban(), new BigDecimal("40"));
+
+        // then
+        assertThat(transactionRepository.count()).isEqualTo(1);
+        assertThat(transactionRepository.findAll().getFirst().getType()).isEqualTo(TransactionType.WITHDRAWAL);
+        assertThat(movementRepository.count()).isEqualTo(1);
+
+        MovementEntity movement = movementRepository.findAll().getFirst();
+
+        assertThat(movement.getSourceIban()).isEqualTo(source.getIban());
+        assertThat(movement.getTargetIban()).isNull();
+        assertThat(movement.getType()).isEqualTo(MovementType.WITHDRAWAL);
+        assertThat(movement.getAmount()).isEqualByComparingTo(new BigDecimal("40"));
+
+        assertThat(ledgerEntryRepository.count()).isEqualTo(2);
+        List<LedgerEntryEntity> entries = ledgerEntryRepository.findAll().stream().toList();
+        LedgerEntry credit = entries.stream().filter(e -> e.getDirection() == EntryDirection.CREDIT)
+                .map(ledgerEntryMapper::toDomain).findFirst().orElseThrow();
+        LedgerEntry debit = entries.stream().filter(e -> e.getDirection() == EntryDirection.DEBIT)
+                .map(ledgerEntryMapper::toDomain).findFirst().orElseThrow();
+
+        assertThat(credit.getAccountIban()).isEqualTo(LedgerEntry.EXTERNAL_ACCOUNT);
+        assertThat(debit.getAccountIban()).isEqualTo(source.getIban());
+        assertThat(credit.getAmount()).isEqualByComparingTo(new BigDecimal("40"));
+        assertThat(debit.getAmount()).isEqualByComparingTo(new BigDecimal("40"));
+        assertThat(accountRepository.findByIban(source.getIban()).orElseThrow()
+                .getBalance()).isEqualByComparingTo(new BigDecimal("60"));
+    }
+
+    @Test
+    @DisplayName("A withdrawal with insufficient balance must not write any ledger row")
+    void withdrawShouldNotWriteAnythingWhenBalanceIsInsufficient() {
+        // given
+        Account source = createAccountPort.execute("receiver@gmail.com", new BigDecimal("100"));
+
+        // when / then
+        assertThatThrownBy(() -> withdrawPort.withdraw(
+                "receiver@gmail.com", source.getIban(), new BigDecimal("150")))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Insufficient balance");
+
+        assertThat(transactionRepository.count()).isZero();
+        assertThat(movementRepository.count()).isZero();
+        assertThat(ledgerEntryRepository.count()).isZero();
+        assertThat(accountRepository.findByIban(source.getIban()).orElseThrow().getBalance())
+                .isEqualByComparingTo("100");
+    }
+
+    @Test
+    @DisplayName("An admin deposit should produce 1 DEPOSIT movement and 2 ledger entries")
+    void adminDepositShouldProduceMovementAndEntries() {
+        // given
+        Account target = createAccountPort.execute("receiver@gmail.com", new BigDecimal("100"));
+
+        // when
+        depositPort.adminDeposit(target.getIban(), new BigDecimal("50"));
+
+        // then
+        assertThat(transactionRepository.count()).isEqualTo(1);
+        assertThat(movementRepository.count()).isEqualTo(1);
+
+        MovementEntity movement = movementRepository.findAll().getFirst();
+        assertThat(movement.getType()).isEqualTo(MovementType.DEPOSIT);
+        assertThat(movement.getSourceIban()).isNull();
+        assertThat(movement.getTargetIban()).isEqualTo(target.getIban());
+
+        List<LedgerEntry> entries = ledgerEntryRepository.findAll().stream()
+                .map(ledgerEntryMapper::toDomain)
+                .toList();
+
+        LedgerEntry debit = entries.stream()
+                .filter(e -> e.getDirection() == EntryDirection.DEBIT)
+                .findFirst()
+                .orElseThrow();
+        LedgerEntry credit = entries.stream()
+                .filter(e -> e.getDirection() == EntryDirection.CREDIT)
+                .findFirst()
+                .orElseThrow();
+
+        assertThat(debit.getAccountIban()).isEqualTo(LedgerEntry.EXTERNAL_ACCOUNT);
+        assertThat(credit.getAccountIban()).isEqualTo(target.getIban());
+        assertThat(debit.getAmount()).isEqualByComparingTo("50");
+        assertThat(debit.getMovementId()).isEqualTo(movement.getId());
+        assertThat(credit.getMovementId()).isEqualTo(movement.getId());
+        assertThat(accountRepository.findByIban(target.getIban()).orElseThrow().getBalance())
+                .isEqualByComparingTo("150");
+    }
+
+    @Test
+    @DisplayName("An admin withdrawal should produce 1 WITHDRAWAL movement and 2 ledger entries")
+    void adminWithdrawShouldProduceMovementAndEntries() {
+        // given
+        Account source = createAccountPort.execute("receiver@gmail.com", new BigDecimal("100"));
+
+        // when
+        withdrawPort.adminWithdraw(source.getIban(), new BigDecimal("40"));
+
+        // then
+        assertThat(transactionRepository.count()).isEqualTo(1);
+        assertThat(movementRepository.count()).isEqualTo(1);
+
+        MovementEntity movement = movementRepository.findAll().getFirst();
+        assertThat(movement.getType()).isEqualTo(MovementType.WITHDRAWAL);
+        assertThat(movement.getSourceIban()).isEqualTo(source.getIban());
+        assertThat(movement.getTargetIban()).isNull();
+
+        List<LedgerEntry> entries = ledgerEntryRepository.findAll().stream()
+                .map(ledgerEntryMapper::toDomain)
+                .toList();
+
+        LedgerEntry debit = entries.stream()
+                .filter(e -> e.getDirection() == EntryDirection.DEBIT)
+                .findFirst()
+                .orElseThrow();
+        LedgerEntry credit = entries.stream()
+                .filter(e -> e.getDirection() == EntryDirection.CREDIT)
+                .findFirst()
+                .orElseThrow();
+
+        assertThat(debit.getAccountIban()).isEqualTo(source.getIban());
+        assertThat(credit.getAccountIban()).isEqualTo(LedgerEntry.EXTERNAL_ACCOUNT);
+        assertThat(debit.getAmount()).isEqualByComparingTo("40");
+        assertThat(debit.getMovementId()).isEqualTo(movement.getId());
+        assertThat(credit.getMovementId()).isEqualTo(movement.getId());
+        assertThat(accountRepository.findByIban(source.getIban()).orElseThrow().getBalance())
+                .isEqualByComparingTo("60");
     }
 }

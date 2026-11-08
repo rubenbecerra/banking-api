@@ -31,10 +31,13 @@ public class TransactionUseCaseConfig {
     @Bean
     public DepositPort depositPort(TransactionRepository txRepo,
                                    AccountRepository accRepo,
+                                   MovementRepository movementRepository,
+                                   LedgerEntryRepository ledgerEntryRepository,
                                    IdempotencyTemplate idempotencyTemplate,
                                    TransactionTemplate transactionTemplate) {
 
-        DepositUseCase useCase = new DepositUseCase(txRepo, accRepo);
+        DepositUseCase useCase = new DepositUseCase(txRepo, accRepo,
+                movementRepository, ledgerEntryRepository);
 
         DepositUseCaseTransactionalDecorator transactionalDecorator =
                 new DepositUseCaseTransactionalDecorator(useCase, transactionTemplate);
@@ -45,10 +48,13 @@ public class TransactionUseCaseConfig {
     @Bean
     public WithdrawPort withdrawPort(TransactionRepository txRepo,
                                      AccountRepository accRepo,
+                                     MovementRepository movementRepository,
+                                     LedgerEntryRepository ledgerEntryRepository,
                                      TransactionTemplate transactionTemplate,
                                      IdempotencyTemplate idempotencyTemplate) {
 
-        WithdrawUseCase useCase = new WithdrawUseCase(txRepo, accRepo);
+        WithdrawUseCase useCase = new WithdrawUseCase(txRepo, accRepo,
+                movementRepository, ledgerEntryRepository);
 
         WithdrawUseCaseTransactionalDecorator transactionalDecorator =
                 new WithdrawUseCaseTransactionalDecorator(useCase, transactionTemplate);
