@@ -12,6 +12,7 @@ import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Instant;
 import java.util.HashMap;
@@ -86,6 +87,17 @@ public class GlobalExceptionHandler {
                 "HTTP method '" + ex.getMethod() + "' is not supported for this endpoint"
         );
         return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED).body(body);
+    }
+
+    @ExceptionHandler(ResponseStatusException.class)
+    public ResponseEntity<Map<String, Object>> handleResponseStatus(ResponseStatusException ex) {
+        HttpStatus status = HttpStatus.valueOf(ex.getStatusCode().value());
+        Map<String, Object> body = buildErrorResponse(
+                status.value(),
+                status.getReasonPhrase(),
+                ex.getReason()
+        );
+        return ResponseEntity.status(status).body(body);
     }
 
     @ExceptionHandler(Exception.class)

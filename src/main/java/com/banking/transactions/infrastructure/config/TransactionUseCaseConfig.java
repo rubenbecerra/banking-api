@@ -3,15 +3,12 @@ package com.banking.transactions.infrastructure.config;
 import com.banking.accounts.domain.repository.AccountRepository;
 import com.banking.ledger.domain.repository.LedgerEntryRepository;
 import com.banking.ledger.domain.repository.MovementRepository;
+import com.banking.shared.idempotency.domain.repository.IdempotencyKeyRepository;
 import com.banking.shared.infrastructure.idempotency.IdempotencyTemplate;
-import com.banking.shared.infrastructure.redis.IdempotencyRepository;
 import com.banking.transactions.application.decorator.idempotency.DepositUseCaseIdempotencyDecorator;
 import com.banking.transactions.application.decorator.idempotency.TransferUseCaseIdempotencyDecorator;
 import com.banking.transactions.application.decorator.idempotency.WithdrawUseCaseIdempotencyDecorator;
-import com.banking.transactions.application.decorator.transactional.DepositUseCaseTransactionalDecorator;
 import com.banking.transactions.application.decorator.transactional.GetTransactionsUseCaseTransactionalDecorator;
-import com.banking.transactions.application.decorator.transactional.TransferMoneyUseCaseTransactionalDecorator;
-import com.banking.transactions.application.decorator.transactional.WithdrawUseCaseTransactionalDecorator;
 import com.banking.transactions.application.usecase.*;
 import com.banking.transactions.domain.repository.TransactionRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -23,9 +20,10 @@ import org.springframework.transaction.support.TransactionTemplate;
 public class TransactionUseCaseConfig {
 
     @Bean
-    public IdempotencyTemplate idempotencyTemplate(IdempotencyRepository idempotencyRepository,
-                                                   ObjectMapper objectMapper) {
-        return new IdempotencyTemplate(idempotencyRepository, objectMapper);
+    public IdempotencyTemplate idempotencyTemplate(IdempotencyKeyRepository idempotencyKeyRepository,
+                                                   ObjectMapper objectMapper,
+                                                   TransactionTemplate transactionTemplate) {
+        return new IdempotencyTemplate(idempotencyKeyRepository, objectMapper, transactionTemplate);
     }
 
     @Bean
@@ -33,16 +31,12 @@ public class TransactionUseCaseConfig {
                                    AccountRepository accRepo,
                                    MovementRepository movementRepository,
                                    LedgerEntryRepository ledgerEntryRepository,
-                                   IdempotencyTemplate idempotencyTemplate,
-                                   TransactionTemplate transactionTemplate) {
+                                   IdempotencyTemplate idempotencyTemplate) {
 
         DepositUseCase useCase = new DepositUseCase(txRepo, accRepo,
                 movementRepository, ledgerEntryRepository);
 
-        DepositUseCaseTransactionalDecorator transactionalDecorator =
-                new DepositUseCaseTransactionalDecorator(useCase, transactionTemplate);
-
-        return new DepositUseCaseIdempotencyDecorator(transactionalDecorator, idempotencyTemplate);
+        return new DepositUseCaseIdempotencyDecorator(useCase, idempotencyTemplate);
     }
 
     @Bean
@@ -50,16 +44,12 @@ public class TransactionUseCaseConfig {
                                      AccountRepository accRepo,
                                      MovementRepository movementRepository,
                                      LedgerEntryRepository ledgerEntryRepository,
-                                     TransactionTemplate transactionTemplate,
                                      IdempotencyTemplate idempotencyTemplate) {
 
         WithdrawUseCase useCase = new WithdrawUseCase(txRepo, accRepo,
                 movementRepository, ledgerEntryRepository);
 
-        WithdrawUseCaseTransactionalDecorator transactionalDecorator =
-                new WithdrawUseCaseTransactionalDecorator(useCase, transactionTemplate);
-
-        return new WithdrawUseCaseIdempotencyDecorator(transactionalDecorator, idempotencyTemplate);
+        return new WithdrawUseCaseIdempotencyDecorator(useCase, idempotencyTemplate);
     }
 
     @Bean
@@ -67,15 +57,12 @@ public class TransactionUseCaseConfig {
                                                AccountRepository accRepo,
                                                MovementRepository movementRepository,
                                                LedgerEntryRepository ledgerEntryRepository,
-                                               TransactionTemplate transactionTemplate,
                                                IdempotencyTemplate idempotencyTemplate) {
 
         TransferMoneyUseCase useCase = new TransferMoneyUseCase(txRepo, accRepo,
-                movementRepository, ledgerEntryRepository );
-        TransferMoneyUseCaseTransactionalDecorator transactionalDecorator =
-                new TransferMoneyUseCaseTransactionalDecorator(useCase, transactionTemplate);
+                movementRepository, ledgerEntryRepository);
 
-        return new TransferUseCaseIdempotencyDecorator(transactionalDecorator,idempotencyTemplate);
+        return new TransferUseCaseIdempotencyDecorator(useCase, idempotencyTemplate);
     }
 
     @Bean

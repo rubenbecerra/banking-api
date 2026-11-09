@@ -5,13 +5,13 @@
 ![Spring Boot 4](https://img.shields.io/badge/Spring%20Boot-4.x-brightgreen?logo=springboot)
 ![PostgreSQL 16](https://img.shields.io/badge/PostgreSQL-16-blue?logo=postgresql)
 ![Redis 7](https://img.shields.io/badge/Redis-7-red?logo=redis)
-![Coverage](https://img.shields.io/badge/Coverage-87%25-green)
+![Coverage](https://img.shields.io/badge/Coverage-88%25-green)
 
 Java 21 · Spring Boot 4 · PostgreSQL · Redis · Docker · GitHub Actions
 
 A core banking REST API built to practice transactional correctness: accounts, deposits,
-withdrawals, transfers and transaction history, with JWT/RBAC security, Redis-backed idempotency
-and pessimistic locking.
+withdrawals, transfers and transaction history, with JWT/RBAC security, database-backed
+idempotency committed with the ledger write, and pessimistic locking.
 
 > **Reference implementation, not production software.** Known limitations are documented below.
 
@@ -35,7 +35,8 @@ Local demo admin: `admin@bank.com` / `Admin123!` (local only; change it before a
 
 - 24 REST endpoints for customers, accounts, deposits, withdrawals, transfers and history.
 - JWT authentication in HttpOnly/SameSite=Strict cookies, BCrypt and RBAC.
-- Redis-backed idempotency scoped per user and operation.
+- Database-backed idempotency: the key, the movement and its two ledger entries commit in one
+  transaction, with a unique `(principal, scope, key)`.
 - Pessimistic locking in IBAN order to prevent deadlocks and lost updates.
 - Flyway migrations, Bean Validation, OpenAPI/Swagger and Actuator.
 - Integration tests against real PostgreSQL and Redis with Testcontainers.
@@ -70,8 +71,8 @@ flowchart TD
     C --> D[Use cases]
     D --> E[Domain ports]
     E --> F[Repository adapters]
-    F --> G[(PostgreSQL)]
-    D --> H[(Redis: cache / idempotency)]
+    F --> G[(PostgreSQL: accounts, ledger, idempotency_keys)]
+    D --> H[(Redis: cache)]
 ```
 
 Clean/Hexagonal boundaries: the domain has no Spring, the application layer orchestrates use
@@ -83,7 +84,25 @@ cases, and the infrastructure layer implements adapters.
 - `com.banking.customers` — customer profiles, registration and credentials.
 - `com.banking.transactions` — deposits, withdrawals and transfers.
 - `com.banking.auth` — login, refresh and logout.
-- `com.banking.shared` — security filters, JWT, exception handling and Redis.
+- `com.banking.shared` — security filters, JWT, exception handling, idempotency and Redis.
+
+---
+
+## Idempotency
+
+Money-moving endpoints accept `X-Idempotency-Key`. The key is stored in `idempotency_keys` with a
+unique `(principal, scope, key)` constraint and committed **in the same transaction** as the
+movement and its two ledger entries.
+
+- **First request:** insert `PROCESSING`, write the money, update the row to `COMPLETED` with the
+  response JSON, commit.
+- **Retry after commit:** the insert hits `23505`; the transaction is rolled back and the stored
+  response is read in a new transaction. The client gets `200` with the original body.
+- **Same key, different payload:** `422` (SHA-256 fingerprint of IBANs + normalized amount).
+- **Business failure:** the whole transaction rolls back, including the key, so a retry can execute.
+- **Retention:** 24 hours; a daily job deletes expired rows.
+- The duplicate read happens outside the transaction because PostgreSQL aborts it on a unique
+  violation (`current transaction is aborted`).
 
 ---
 
@@ -92,7 +111,7 @@ cases, and the infrastructure layer implements adapters.
 | Decision | Why | Trade-off |
 |---|---|---|
 | JWT in HttpOnly cookies with `SameSite=Strict` | Reduces token theft via XSS; SameSite mitigates CSRF | CSRF token is the next hardening step |
-| Redis-backed idempotency, scoped per user | Safe retries on network failures | Not atomic with the database commit (see limitations) |
+| Database-backed idempotency in the money transaction | A retry cannot duplicate a committed operation, even if the process dies | 24 h retention; external side effects still need an outbox |
 | Pessimistic locking in IBAN order | Prevents lost updates and A→B/B→A deadlocks | Hot accounts serialize; optimistic locking is a future comparison |
 | Explicit transactions with `TransactionTemplate` | Transaction boundaries are visible | More wiring than `@Transactional` |
 | Cache-aside with fallback | Reads survive Redis outages | A failed eviction can leave stale data until TTL |
@@ -106,8 +125,8 @@ cases, and the infrastructure layer implements adapters.
 ./mvnw clean verify
 ```
 
-- **75 tests**, 0 failures.
-- **87.21% instruction coverage**, **90.25% line coverage**, **60.44% branch coverage**.
+- **91 tests**, 0 failures.
+- **88.45% instruction coverage**, **91.44% line coverage**, **58.67% branch coverage**.
 - Integration tests with **Testcontainers** against PostgreSQL 16 and Redis 7.
 - CI enforces the **85% instruction coverage** gate.
 - JaCoCo report: `target/site/jacoco/index.html`.
@@ -151,10 +170,13 @@ $env:SPRING_PROFILES_ACTIVE="dev"; .\mvnw.cmd spring-boot:run
 
 ## Known limitations
 
-- **Redis idempotency is not atomic with the database commit.** A Redis failure after the commit
-  can delete the key and allow a retry to duplicate the operation. The next step is a
-  database-backed idempotency key written in the same transaction as the money movement.
-- **Branch coverage is 60.44%.** Happy paths are covered; security error paths and cache
+- **Idempotency keys expire after 24 hours.** The daily purge job deletes them; after that window
+  the same key can execute again. This is the same contract the previous Redis TTL had.
+- **External side effects are not atomic with the database.** Emails or events published outside
+  the transaction can be duplicated or lost; the transactional outbox is the next step.
+- **No `lock_timeout` on the idempotency insert.** A hung transaction makes concurrent retries
+  with the same key wait until it finishes.
+- **Branch coverage is 58.67%.** Happy paths are covered; security error paths and cache
   fallbacks are the next target.
 - **No rate limiting on authentication endpoints.** Add Redis/Bucket4j throttling and account
   lockout before exposing login publicly.
@@ -166,11 +188,11 @@ $env:SPRING_PROFILES_ACTIVE="dev"; .\mvnw.cmd spring-boot:run
 
 ## Roadmap
 
-1. Database-backed idempotency (same transaction as the money movement).
-2. Transactional outbox + relay for events.
-3. Rate limiting on auth + CSRF token.
-4. k6 load test with p95/p99.
-5. Reconciliation job (`sum(entries) == balance`).
+1. Transactional outbox + relay for events.
+2. Rate limiting on auth + CSRF token.
+3. k6 load test with p95/p99.
+4. Reconciliation job (`sum(entries) == balance`).
+5. `lock_timeout` + 409 on in-flight idempotency retries.
 
 ---
 

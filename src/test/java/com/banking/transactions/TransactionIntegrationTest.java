@@ -5,6 +5,9 @@ import com.banking.Main;
 import com.banking.accounts.domain.model.Account;
 import com.banking.accounts.application.usecase.CreateAccountPort;
 import com.banking.accounts.infrastructure.persistence.SpringDataAccountRepository;
+import com.banking.ledger.infrastructure.persistence.SpringDataLedgerEntryRepository;
+import com.banking.ledger.infrastructure.persistence.SpringDataMovementRepository;
+import com.banking.shared.idempotency.infrastructure.persistence.SpringDataIdempotencyKeyRepository;
 import com.banking.shared.security.JWTUtil;
 import com.banking.accounts.domain.repository.AccountRepository;
 import com.banking.transactions.domain.model.Transaction;
@@ -65,12 +68,24 @@ public class TransactionIntegrationTest extends AbstractTestContainers {
     @Autowired
     private JWTUtil jwtUtil;
 
+    @Autowired
+    private SpringDataMovementRepository springDataMovementRepository;
+
+    @Autowired
+    private SpringDataLedgerEntryRepository springDataLedgerEntryRepository;
+
+    @Autowired
+    private SpringDataIdempotencyKeyRepository springDataIdempotencyKeyRepository;
+
     @BeforeEach
     void setUp() {
         restClient = RestClient.builder()
                 .baseUrl("http://localhost:" + port)
                 .build();
 
+        springDataLedgerEntryRepository.deleteAll();
+        springDataMovementRepository.deleteAll();
+        springDataIdempotencyKeyRepository.deleteAll();
         springDataAccountRepository.deleteAll();
         transactionRepository.deleteAll();
     }
@@ -948,5 +963,141 @@ public class TransactionIntegrationTest extends AbstractTestContainers {
                 .retrieve()
                 .toBodilessEntity())
                 .isInstanceOf(HttpClientErrorException.BadRequest.class);
+    }
+
+    @Test
+    @DisplayName("Same idempotency key with a different payload is rejected with 422")
+    void sameKeyWithDifferentPayloadIsRejected() {
+        String email = "idem-payload@bank.com";
+        String token = jwtUtil.generateTestToken(email, List.of("ROLE_USER"));
+        Account account = createAccountPort.execute(email, BigDecimal.ZERO);
+        String key = java.util.UUID.randomUUID().toString();
+
+        restClient.post()
+                .uri("/api/v1/transactions/deposit")
+                .header(HttpHeaders.COOKIE, "accessToken=" + token)
+                .header("X-Idempotency-Key", key)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(new DepositRequest(account.getIban(), BigDecimal.valueOf(50)))
+                .retrieve()
+                .toBodilessEntity();
+
+        assertThatThrownBy(() -> restClient.post()
+                .uri("/api/v1/transactions/deposit")
+                .header(HttpHeaders.COOKIE, "accessToken=" + token)
+                .header("X-Idempotency-Key", key)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(new DepositRequest(account.getIban(), BigDecimal.valueOf(60)))
+                .retrieve()
+                .toBodilessEntity())
+                .isInstanceOf(HttpClientErrorException.class)
+                .satisfies(ex -> assertThat(((HttpClientErrorException) ex).getStatusCode().value())
+                        .isEqualTo(422));
+
+        assertThat(accountRepository.findByIban(account.getIban()).orElseThrow().getBalance())
+                .isEqualByComparingTo(BigDecimal.valueOf(50));
+        assertThat(transactionRepository.findAll()).hasSize(1);
+        assertThat(springDataMovementRepository.count()).isEqualTo(1);
+        assertThat(springDataLedgerEntryRepository.count()).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("A failed operation does not consume the idempotency key")
+    void failedOperationDoesNotConsumeKey() {
+        String email = "idem-failure@bank.com";
+        String token = jwtUtil.generateTestToken(email, List.of("ROLE_USER"));
+        Account account = createAccountPort.execute(email, BigDecimal.valueOf(10));
+        String key = java.util.UUID.randomUUID().toString();
+
+        assertThatThrownBy(() -> restClient.post()
+                .uri("/api/v1/transactions/withdraw")
+                .header(HttpHeaders.COOKIE, "accessToken=" + token)
+                .header("X-Idempotency-Key", key)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(new WithdrawalRequest(account.getIban(), BigDecimal.valueOf(100)))
+                .retrieve()
+                .toBodilessEntity())
+                .isInstanceOf(HttpClientErrorException.class)
+                .satisfies(ex -> assertThat(((HttpClientErrorException) ex).getStatusCode().value())
+                        .isEqualTo(400));
+
+        ResponseEntity<Void> retry = restClient.post()
+                .uri("/api/v1/transactions/withdraw")
+                .header(HttpHeaders.COOKIE, "accessToken=" + token)
+                .header("X-Idempotency-Key", key)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(new WithdrawalRequest(account.getIban(), BigDecimal.valueOf(5)))
+                .retrieve()
+                .toBodilessEntity();
+
+        assertThat(retry.getStatusCode().value()).isEqualTo(201);
+        assertThat(accountRepository.findByIban(account.getIban()).orElseThrow().getBalance())
+                .isEqualByComparingTo(BigDecimal.valueOf(5));
+        assertThat(transactionRepository.findAll()).hasSize(1);
+        assertThat(springDataMovementRepository.count()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("Concurrent requests with the same key execute the operation only once")
+    void concurrentRequestsWithSameKeyExecuteOnce() throws InterruptedException {
+        String email = "idem-concurrent@bank.com";
+        String token = jwtUtil.generateTestToken(email, List.of("ROLE_USER"));
+        Account account = createAccountPort.execute(email, BigDecimal.ZERO);
+        String key = java.util.UUID.randomUUID().toString();
+
+        int threads = 2;
+        ExecutorService executor = Executors.newFixedThreadPool(threads);
+        CountDownLatch ready = new CountDownLatch(threads);
+        CountDownLatch start = new CountDownLatch(1);
+        CountDownLatch done = new CountDownLatch(threads);
+        AtomicInteger created = new AtomicInteger();
+        AtomicInteger replayed = new AtomicInteger();
+        AtomicInteger conflicted = new AtomicInteger();
+
+        for (int i = 0; i < threads; i++) {
+            executor.submit(() -> {
+                ready.countDown();
+                try {
+                    start.await();
+                    ResponseEntity<Void> response = restClient.post()
+                            .uri("/api/v1/transactions/deposit")
+                            .header(HttpHeaders.COOKIE, "accessToken=" + token)
+                            .header("X-Idempotency-Key", key)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .body(new DepositRequest(account.getIban(), BigDecimal.valueOf(50)))
+                            .retrieve()
+                            .toBodilessEntity();
+
+                    if (response.getStatusCode().value() == 201) {
+                        created.incrementAndGet();
+                    } else if (response.getStatusCode().value() == 200) {
+                        replayed.incrementAndGet();
+                    }
+                } catch (HttpClientErrorException e) {
+                    if (e.getStatusCode().value() == 409) {
+                        conflicted.incrementAndGet();
+                    } else {
+                        throw e;
+                    }
+                } catch (Exception e) {
+                    throw new RuntimeException(e);
+                } finally {
+                    done.countDown();
+                }
+            });
+        }
+
+        ready.await();
+        start.countDown();
+        done.await();
+        executor.shutdown();
+
+        assertThat(created.get()).isEqualTo(1);
+        assertThat(replayed.get() + conflicted.get()).isEqualTo(1);
+        assertThat(accountRepository.findByIban(account.getIban()).orElseThrow().getBalance())
+                .isEqualByComparingTo(BigDecimal.valueOf(50));
+        assertThat(transactionRepository.findAll()).hasSize(1);
+        assertThat(springDataMovementRepository.count()).isEqualTo(1);
+        assertThat(springDataLedgerEntryRepository.count()).isEqualTo(2);
     }
 }

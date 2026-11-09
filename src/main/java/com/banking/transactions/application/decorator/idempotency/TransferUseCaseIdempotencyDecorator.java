@@ -12,21 +12,26 @@ public class TransferUseCaseIdempotencyDecorator implements TransferMoneyPort {
     private final TransferMoneyPort decoratedPort;
     private final IdempotencyTemplate idempotencyTemplate;
 
-    public TransferUseCaseIdempotencyDecorator(TransferMoneyPort transferMoneyPort,
-                                                      IdempotencyTemplate idempotencyTemplate) {
-        this.decoratedPort = transferMoneyPort;
+    public TransferUseCaseIdempotencyDecorator(TransferMoneyPort decoratedPort,
+                                               IdempotencyTemplate idempotencyTemplate) {
+        this.decoratedPort = decoratedPort;
         this.idempotencyTemplate = idempotencyTemplate;
     }
+
     @Override
     public OperationResult<Transaction> transferMoney(String ownerEmail,
                                                       String sourceIban,
                                                       String targetIban,
                                                       BigDecimal amount) {
-        return idempotencyTemplate.execute("transfer", Transaction.class, () ->
-                decoratedPort.transferMoney(ownerEmail,
-                        sourceIban,
-                        targetIban,
-                        amount)
+        return idempotencyTemplate.execute(
+                "transfer",
+                fingerprint(sourceIban, targetIban, amount),
+                Transaction.class,
+                () -> decoratedPort.transferMoney(ownerEmail, sourceIban, targetIban, amount)
         );
+    }
+
+    private String fingerprint(String sourceIban, String targetIban, BigDecimal amount) {
+        return sourceIban + "|" + targetIban + "|" + amount.stripTrailingZeros().toPlainString();
     }
 }
