@@ -14,6 +14,8 @@ public abstract class AbstractTestContainers {
     @DynamicPropertySource
     static void jwtProperties(DynamicPropertyRegistry registry) {
         registry.add("jwt.secret", () -> "test-only-jwt-secret-with-at-least-32-characters");
+        // The relay would publish rows between a test's insert and its assertions.
+        registry.add("outbox.relay.enabled", () -> "false");
     }
 
     @ServiceConnection

@@ -5,6 +5,7 @@ import com.banking.ledger.domain.repository.LedgerEntryRepository;
 import com.banking.ledger.domain.repository.MovementRepository;
 import com.banking.shared.idempotency.domain.repository.IdempotencyKeyRepository;
 import com.banking.shared.infrastructure.idempotency.IdempotencyTemplate;
+import com.banking.shared.outbox.domain.repository.OutboxEventRepository;
 import com.banking.transactions.application.decorator.idempotency.DepositUseCaseIdempotencyDecorator;
 import com.banking.transactions.application.decorator.idempotency.TransferUseCaseIdempotencyDecorator;
 import com.banking.transactions.application.decorator.idempotency.WithdrawUseCaseIdempotencyDecorator;
@@ -57,10 +58,12 @@ public class TransactionUseCaseConfig {
                                                AccountRepository accRepo,
                                                MovementRepository movementRepository,
                                                LedgerEntryRepository ledgerEntryRepository,
-                                               IdempotencyTemplate idempotencyTemplate) {
+                                               IdempotencyTemplate idempotencyTemplate,
+                                               OutboxEventRepository outboxRepository,
+                                               ObjectMapper objectMapper) {
 
         TransferMoneyUseCase useCase = new TransferMoneyUseCase(txRepo, accRepo,
-                movementRepository, ledgerEntryRepository);
+                movementRepository, ledgerEntryRepository, outboxRepository, objectMapper);
 
         return new TransferUseCaseIdempotencyDecorator(useCase, idempotencyTemplate);
     }

@@ -7,9 +7,16 @@ import com.banking.ledger.domain.model.Movement;
 import com.banking.ledger.domain.repository.LedgerEntryRepository;
 import com.banking.ledger.domain.repository.MovementRepository;
 import com.banking.shared.exceptions.exception.UnauthorizedActionException;
+import com.banking.shared.outbox.contract.MoneyTransferredPayload;
+import com.banking.shared.outbox.domain.model.OutboxAggregateTypes;
+import com.banking.shared.outbox.domain.model.OutboxEvent;
+import com.banking.shared.outbox.domain.model.OutboxEventTypes;
+import com.banking.shared.outbox.domain.repository.OutboxEventRepository;
 import com.banking.transactions.domain.model.Transaction;
 import com.banking.transactions.domain.model.TransactionType;
 import com.banking.transactions.domain.repository.TransactionRepository;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -21,13 +28,18 @@ public class TransferMoneyUseCase implements TransferMoneyPort {
     private final AccountRepository accountRepository;
     private final MovementRepository movementRepository;
     private final LedgerEntryRepository ledgerEntryRepository;
+    private final OutboxEventRepository outboxRepository;
+    private final ObjectMapper objectMapper;
 
     public TransferMoneyUseCase(TransactionRepository transactionRepository, AccountRepository accountRepository,
-                                MovementRepository movementRepository, LedgerEntryRepository ledgerEntryRepository) {
+                                MovementRepository movementRepository, LedgerEntryRepository ledgerEntryRepository,
+                                OutboxEventRepository outboxRepository, ObjectMapper objectMapper) {
         this.transactionRepository = transactionRepository;
         this.accountRepository = accountRepository;
         this.movementRepository = movementRepository;
         this.ledgerEntryRepository = ledgerEntryRepository;
+        this.outboxRepository = outboxRepository;
+        this.objectMapper = objectMapper;
     }
 
     @Override
@@ -84,6 +96,31 @@ public class TransferMoneyUseCase implements TransferMoneyPort {
                 LedgerEntry.createCredit(movement.getId(), target.getIban(), amount)
         ));
 
+        MoneyTransferredPayload payload = new MoneyTransferredPayload(
+                movement.getId(),
+                source.getIban(),
+                target.getIban(),
+                amount,
+                movement.getCreatedAt());
+
+        outboxRepository.append(OutboxEvent.pending(
+                OutboxAggregateTypes.MOVEMENT,
+                movement.getId(),
+                OutboxEventTypes.MONEY_TRANSFERRED,
+                toJson(payload),
+                movement.getCreatedAt()
+        ));
+
         return OperationResult.fresh(savedTransaction);
+    }
+
+    private String toJson(MoneyTransferredPayload payload) {
+        try {
+            return objectMapper.writeValueAsString(payload);
+        } catch (JsonProcessingException e) {
+            // Cannot serialize the event -> fail the transaction: no money moved
+            // without a matching event.
+            throw new IllegalStateException("Cannot serialize outbox payload", e);
+        }
     }
 }
