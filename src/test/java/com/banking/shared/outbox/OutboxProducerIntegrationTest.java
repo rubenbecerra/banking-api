@@ -6,6 +6,8 @@ import com.banking.accounts.infrastructure.persistence.SpringDataAccountReposito
 import com.banking.customer.AbstractTestContainers;
 import com.banking.ledger.infrastructure.persistence.SpringDataLedgerEntryRepository;
 import com.banking.ledger.infrastructure.persistence.SpringDataMovementRepository;
+import com.banking.ledger.domain.model.MovementType;
+import com.banking.ledger.infrastructure.persistence.MovementEntity;
 import com.banking.shared.idempotency.infrastructure.persistence.SpringDataIdempotencyKeyRepository;
 import com.banking.shared.outbox.domain.repository.OutboxEventRepository;
 import com.banking.shared.outbox.infrastructure.persistence.OutboxEventEntity;
@@ -106,7 +108,10 @@ class OutboxProducerIntegrationTest extends AbstractTestContainers {
         assertThat(events).hasSize(1);
         OutboxEventEntity event = events.get(0);
 
-        List<Long> movementIds = movementRows.findAll().stream().map(m -> m.getId()).toList();
+        List<Long> movementIds = movementRows.findAll().stream()
+                .filter(m -> m.getType() == MovementType.TRANSFER)
+                .map(MovementEntity::getId)
+                .toList();
         assertThat(movementIds).hasSize(1);
         long movementId = movementIds.get(0);
 
@@ -132,17 +137,20 @@ class OutboxProducerIntegrationTest extends AbstractTestContainers {
     @Test
     @DisplayName("a rejected transfer writes nothing: no event, no money")
     void failedTransferLeavesNoEvent() {
+        long transactionsBefore = transactionRows.count();
         Account source = createAccountPort.execute("sender@gmail.com", new BigDecimal("100"));
         Account target = createAccountPort.execute("receiver@gmail.com", new BigDecimal("50"));
-        long transactionsBefore = transactionRows.count();
+        // Opening balances are ledger-backed: compare against the setup, not zero.
+        long movementsBefore = movementRows.count();
+        long entriesBefore = ledgerEntryRows.count();
 
         assertThatThrownBy(() -> transferMoneyPort.transferMoney("sender@gmail.com",
                 source.getIban(), target.getIban(), new BigDecimal("500")))
                 .isInstanceOf(IllegalArgumentException.class);
 
         assertThat(outboxRows.findAll()).isEmpty();
-        assertThat(movementRows.findAll()).isEmpty();
-        assertThat(ledgerEntryRows.findAll()).isEmpty();
+        assertThat(movementRows.count()).isEqualTo(movementsBefore);
+        assertThat(ledgerEntryRows.count()).isEqualTo(entriesBefore);
         assertThat(transactionRows.count()).isEqualTo(transactionsBefore);
         // Re-read from the database: the in-memory Account is not the row the
         // use case updated.
@@ -169,8 +177,13 @@ class OutboxProducerIntegrationTest extends AbstractTestContainers {
         assertThat(replay.data().getId()).isEqualTo(first.data().getId());
 
         assertThat(outboxRows.findAll()).hasSize(1);
-        assertThat(movementRows.findAll()).hasSize(1);
-        assertThat(ledgerEntryRows.findAll()).hasSize(2);
+        List<MovementEntity> transfers = movementRows.findAll().stream()
+                .filter(m -> m.getType() == MovementType.TRANSFER)
+                .toList();
+        assertThat(transfers).hasSize(1);
+        assertThat(ledgerEntryRows.findAll().stream()
+                .filter(e -> e.getMovementId().equals(transfers.getFirst().getId()))
+                .toList()).hasSize(2);
         // The only proof that matters: the money moved once.
         assertThat(balanceOf(source.getIban())).isEqualByComparingTo("60");
         assertThat(balanceOf(target.getIban())).isEqualByComparingTo("90");
@@ -182,6 +195,8 @@ class OutboxProducerIntegrationTest extends AbstractTestContainers {
         Account source = createAccountPort.execute("sender@gmail.com", new BigDecimal("100"));
         Account target = createAccountPort.execute("receiver@gmail.com", new BigDecimal("50"));
         long transactionsBefore = transactionRows.count();
+        long movementsBefore = movementRows.count();
+        long entriesBefore = ledgerEntryRows.count();
 
         doThrow(new IllegalStateException("outbox unavailable"))
                 .when(outboxEventRepository).append(any());
@@ -194,8 +209,8 @@ class OutboxProducerIntegrationTest extends AbstractTestContainers {
                 .hasRootCauseMessage("outbox unavailable");
 
         assertThat(outboxRows.count()).isZero();
-        assertThat(movementRows.count()).isZero();
-        assertThat(ledgerEntryRows.count()).isZero();
+        assertThat(movementRows.count()).isEqualTo(movementsBefore);
+        assertThat(ledgerEntryRows.count()).isEqualTo(entriesBefore);
         assertThat(transactionRows.count()).isEqualTo(transactionsBefore);
         assertThat(balanceOf(source.getIban())).isEqualByComparingTo("100");
         assertThat(balanceOf(target.getIban())).isEqualByComparingTo("50");

@@ -40,6 +40,8 @@ Local demo admin: `admin@bank.com` / `Admin123!` (local only; change it before a
   transaction, with a unique `(principal, scope, key)`.
 - Transactional outbox: the event is written in the same transaction as the money; a leased relay
   publishes it at-least-once, and consumers deduplicate by event id.
+- Nightly reconciliation: every account's balance is compared with its ledger; breaches are
+  reported, never auto-repaired.
 - Pessimistic locking in IBAN order to prevent deadlocks and lost updates.
 - Flyway migrations, Bean Validation, OpenAPI/Swagger and Actuator.
 - Integration tests against real PostgreSQL and Redis with Testcontainers.
@@ -113,6 +115,23 @@ movement and its two ledger entries.
 
 ---
 
+## Reconciliation
+
+A nightly job compares, for every account, the stored balance with the ledger
+(`sum(credits) - sum(debits)` from `ledger_entries`).
+
+- **It reports, it never repairs.** Fixing a balance automatically would erase the evidence of
+  where the money went. A discrepancy is a row in `reconciliation_discrepancies`.
+- **One open row per account** (partial unique index): a discrepancy that lasts a week is one
+  problem, not seven. When the balance is fixed, the next run sets `resolved_at`.
+- **One SQL statement** does the detection; the reconciliation is O(accounts + entries), not N+1.
+- **Money conservation** is checked too: the net of the whole ledger must be exactly zero.
+- An opening balance is booked as a `DEPOSIT` movement from `EXTERNAL`, so a new account is
+  ledger-backed from the first cent. It is provisioning, not a customer operation, so it does not
+  appear in the customer transaction history.
+
+---
+
 ## Outbox
 
 Every committed transfer writes one row to `outbox` **in the same transaction** as the movement and
@@ -134,6 +153,8 @@ its two ledger entries. Money and event commit or roll back together; there is n
 | Transactional outbox instead of publishing after the commit | The event cannot be lost when the process dies between commit and publish | At-least-once delivery: consumers must deduplicate by event id |
 | Leased claim instead of a status column machine | A crashed relay frees its row automatically; no stuck `PROCESSING` state | One extra timestamp (`claimed_at`) and cutoff rules |
 | One application `Clock` bean for windows, leases and purges | The writer and the reader of a timestamp can never disagree | Slightly more wiring; domain factories still use `now()` |
+| Opening balance booked as a deposit from `EXTERNAL` | A new account is ledger-backed from the first cent | One extra movement and two entries per funded account |
+| Reconciliation reports instead of repairing | The evidence of a lost balance stays in the database | Someone has to look at the discrepancies |
 | Pessimistic locking in IBAN order | Prevents lost updates and A→B/B→A deadlocks | Hot accounts serialize; optimistic locking is a future comparison |
 | Explicit transactions with `TransactionTemplate` | Transaction boundaries are visible | More wiring than `@Transactional` |
 | Cache-aside with fallback | Reads survive Redis outages | A failed eviction can leave stale data until TTL |
@@ -147,8 +168,8 @@ its two ledger entries. Money and event commit or roll back together; there is n
 ./mvnw clean verify
 ```
 
-- **108 tests**, 0 failures.
-- **88.02% instruction coverage**, **90.87% line coverage**, **59.25% branch coverage**.
+- **113 tests**, 0 failures.
+- **88.46% instruction coverage**, **91.03% line coverage**, **60.78% branch coverage**.
 - Integration tests with **Testcontainers** against PostgreSQL 16 and Redis 7.
 - CI enforces the **85% instruction coverage** gate.
 - JaCoCo report: `target/site/jacoco/index.html`.
@@ -201,6 +222,10 @@ $env:SPRING_PROFILES_ACTIVE="dev"; .\mvnw.cmd spring-boot:run
   with the same key wait until it finishes.
 - **The outbox purge is a single `DELETE`.** Fine at this volume; with millions of published rows
   it should run in batches to keep transactions short.
+- **Reconciliation runs once a night.** A balance broken at 10:00 is reported at 03:30; there is
+  no real-time trigger.
+- **Opening balances are not in the customer transaction history.** They are booked in the ledger
+  (movement + two entries) because they are provisioning, not an operation the customer made.
 - **Branch coverage is 59.25%.** Happy paths are covered; security error paths and cache
   fallbacks are the next target.
 - **No rate limiting on authentication endpoints.** Add Redis/Bucket4j throttling and account
@@ -216,9 +241,8 @@ $env:SPRING_PROFILES_ACTIVE="dev"; .\mvnw.cmd spring-boot:run
 1. Idempotent consumer for outbox events (dedup by event id).
 2. Rate limiting on auth + CSRF token.
 3. k6 load test with p95/p99.
-4. Reconciliation job (`sum(entries) == balance`).
-5. `lock_timeout` + 409 on in-flight idempotency retries.
-6. Batched outbox purge.
+4. `lock_timeout` + 409 on in-flight idempotency retries.
+5. Batched outbox purge and batched reconciliation scan.
 
 ---
 

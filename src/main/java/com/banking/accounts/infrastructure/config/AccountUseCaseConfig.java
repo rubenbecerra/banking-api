@@ -7,15 +7,21 @@ import com.banking.accounts.application.usecase.DeleteAccountUseCase;
 import com.banking.accounts.application.usecase.GetAccountsPort;
 import com.banking.accounts.application.usecase.GetAccountsUseCase;
 import com.banking.accounts.domain.repository.AccountRepository;
+import com.banking.ledger.domain.repository.LedgerEntryRepository;
+import com.banking.ledger.domain.repository.MovementRepository;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.transaction.support.TransactionTemplate;
 
 @Configuration
 public class AccountUseCaseConfig {
 
     @Bean
-    public CreateAccountPort createAccountPort(AccountRepository repo) {
-        return new CreateAccountUseCase(repo);
+    public CreateAccountPort createAccountPort(AccountRepository repo,
+                                               MovementRepository movementRepository,
+                                               LedgerEntryRepository ledgerEntryRepository,
+                                               TransactionTemplate transactionTemplate) {
+        return new CreateAccountUseCase(repo, movementRepository, ledgerEntryRepository, transactionTemplate);
     }
 
     @Bean

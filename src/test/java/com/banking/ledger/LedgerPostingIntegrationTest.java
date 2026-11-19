@@ -22,6 +22,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -49,7 +51,8 @@ public class LedgerPostingIntegrationTest extends AbstractTestContainers {
     @Test
     @DisplayName("A transfer should produce 1 transaction, 1 movement and 2 balanced entries")
     void transferMoneyShouldProduceMovementAndEntries() {
-        // Given
+        // Given: opening balances are ledger-backed, so each account already has
+        // one DEPOSIT movement and two entries before the transfer.
         Account source = createAccountPort.execute("sender@gmail.com", new BigDecimal("100"));
         Account target = createAccountPort.execute("receiver@gmail.com", new BigDecimal("50"));
 
@@ -64,7 +67,7 @@ public class LedgerPostingIntegrationTest extends AbstractTestContainers {
         assertThat(result.isCacheHit()).isFalse();
         assertThat(result.data().getId()).isNotNull();
 
-
+        // Opening balances are not customer transactions: the only one is the transfer.
         assertThat(transactionRepository.count()).isEqualTo(1);
         Transaction transaction = transactionRepository.findAll().getFirst();
         assertThat(transaction.getType()).isEqualTo(TransactionType.TRANSFER);
@@ -72,21 +75,19 @@ public class LedgerPostingIntegrationTest extends AbstractTestContainers {
         assertThat(transaction.getTargetIban()).isEqualTo(target.getIban());
         assertThat(transaction.getAmount()).isEqualByComparingTo("40");
 
-
-        assertThat(movementRepository.count()).isEqualTo(1);
-        MovementEntity movement = movementRepository.findAll().getFirst();
+        List<MovementEntity> transfers = movementRepository.findAll().stream()
+                .filter(m -> m.getType() == MovementType.TRANSFER)
+                .toList();
+        assertThat(transfers).hasSize(1);
+        MovementEntity movement = transfers.getFirst();
         assertThat(movement.getId()).isNotNull();
-        assertThat(movement.getType()).isEqualTo(MovementType.TRANSFER);
         assertThat(movement.getSourceIban()).isEqualTo(source.getIban());
         assertThat(movement.getTargetIban()).isEqualTo(target.getIban());
         assertThat(movement.getAmount()).isEqualByComparingTo("40");
         assertThat(movement.getCreatedAt()).isNotNull();
 
-
-        List<LedgerEntryEntity> entries = ledgerEntryRepository.findAll();
+        List<LedgerEntryEntity> entries = entriesOf(movement.getId());
         assertThat(entries).hasSize(2);
-        assertThat(entries).allSatisfy(
-                entry -> assertThat(entry.getMovementId()).isEqualTo(movement.getId()));
 
         LedgerEntryEntity debit = entries.stream()
                 .filter(entry -> entry.getDirection() == EntryDirection.DEBIT)
@@ -123,6 +124,10 @@ public class LedgerPostingIntegrationTest extends AbstractTestContainers {
         Account source = createAccountPort.execute("sender@gmail.com", new BigDecimal("100"));
         Account target = createAccountPort.execute("receiver@gmail.com", new BigDecimal("50"));
 
+        // The setup itself writes the opening deposits: compare against it.
+        long movementsBefore = movementRepository.count();
+        long entriesBefore = ledgerEntryRepository.count();
+
         // When
         assertThatThrownBy(() ->
                 transferMoneyPort.transferMoney(
@@ -135,8 +140,8 @@ public class LedgerPostingIntegrationTest extends AbstractTestContainers {
 
         // Then
         assertThat(transactionRepository.count()).isZero();
-        assertThat(movementRepository.count()).isZero();
-        assertThat(ledgerEntryRepository.count()).isZero();
+        assertThat(movementRepository.count()).isEqualTo(movementsBefore);
+        assertThat(ledgerEntryRepository.count()).isEqualTo(entriesBefore);
 
         assertThat(accountRepository.findByIban(source.getIban()).orElseThrow().getBalance())
                 .isEqualByComparingTo("100");
@@ -149,24 +154,23 @@ public class LedgerPostingIntegrationTest extends AbstractTestContainers {
     void depositShouldProduceTransactionMovementAndEntries() {
         // given
         Account target = createAccountPort.execute("receiver@gmail.com", new BigDecimal("100"));
+        Set<Long> movementsBefore = movementIds();
 
         // when
         depositPort.deposit(target.getIban(), new BigDecimal("50"), "receiver@gmail.com");
 
         // then
         assertThat(transactionRepository.count()).isEqualTo(1);
-        assertThat(movementRepository.findAll().getFirst().getType()).isEqualTo(MovementType.DEPOSIT);
-        assertThat(movementRepository.count()).isEqualTo(1);
-
-        MovementEntity movement = movementRepository.findAll().getFirst();
+        MovementEntity movement = newMovementSince(movementsBefore);
+        assertThat(movement.getType()).isEqualTo(MovementType.DEPOSIT);
         assertThat(movement.getSourceIban()).isNull();
         assertThat(movement.getTargetIban()).isEqualTo(target.getIban());
+        assertThat(movement.getAmount()).isEqualByComparingTo("50");
 
-        assertThat(ledgerEntryRepository.count()).isEqualTo(2);
-
-        List<LedgerEntry> entries = ledgerEntryRepository.findAll().stream()
+        List<LedgerEntry> entries = entriesOf(movement.getId()).stream()
                 .map(ledgerEntryMapper::toDomain)
                 .toList();
+        assertThat(entries).hasSize(2);
 
         LedgerEntry credit = entries.stream()
                 .filter(e -> e.getDirection() == EntryDirection.CREDIT)
@@ -181,8 +185,6 @@ public class LedgerPostingIntegrationTest extends AbstractTestContainers {
         assertThat(credit.getAccountIban()).isEqualTo(target.getIban());
         assertThat(debit.getAmount()).isEqualByComparingTo("50");
         assertThat(credit.getAmount()).isEqualByComparingTo("50");
-        assertThat(debit.getMovementId()).isEqualTo(movement.getId());
-        assertThat(credit.getMovementId()).isEqualTo(movement.getId());
         assertThat(accountRepository.findByIban(target.getIban()).orElseThrow().getBalance())
                 .isEqualByComparingTo("150.00");
     }
@@ -192,6 +194,7 @@ public class LedgerPostingIntegrationTest extends AbstractTestContainers {
     void withdrawShouldProduceTransactionMovenemtAndEntries() {
         // given
         Account source = createAccountPort.execute("receiver@gmail.com", new BigDecimal("100"));
+        Set<Long> movementsBefore = movementIds();
 
         // when
         withdrawPort.withdraw(source.getOwner(), source.getIban(), new BigDecimal("40"));
@@ -199,21 +202,21 @@ public class LedgerPostingIntegrationTest extends AbstractTestContainers {
         // then
         assertThat(transactionRepository.count()).isEqualTo(1);
         assertThat(transactionRepository.findAll().getFirst().getType()).isEqualTo(TransactionType.WITHDRAWAL);
-        assertThat(movementRepository.count()).isEqualTo(1);
 
-        MovementEntity movement = movementRepository.findAll().getFirst();
-
+        MovementEntity movement = newMovementSince(movementsBefore);
         assertThat(movement.getSourceIban()).isEqualTo(source.getIban());
         assertThat(movement.getTargetIban()).isNull();
         assertThat(movement.getType()).isEqualTo(MovementType.WITHDRAWAL);
         assertThat(movement.getAmount()).isEqualByComparingTo(new BigDecimal("40"));
 
-        assertThat(ledgerEntryRepository.count()).isEqualTo(2);
-        List<LedgerEntryEntity> entries = ledgerEntryRepository.findAll().stream().toList();
+        List<LedgerEntry> entries = entriesOf(movement.getId()).stream()
+                .map(ledgerEntryMapper::toDomain)
+                .toList();
+        assertThat(entries).hasSize(2);
         LedgerEntry credit = entries.stream().filter(e -> e.getDirection() == EntryDirection.CREDIT)
-                .map(ledgerEntryMapper::toDomain).findFirst().orElseThrow();
+                .findFirst().orElseThrow();
         LedgerEntry debit = entries.stream().filter(e -> e.getDirection() == EntryDirection.DEBIT)
-                .map(ledgerEntryMapper::toDomain).findFirst().orElseThrow();
+                .findFirst().orElseThrow();
 
         assertThat(credit.getAccountIban()).isEqualTo(LedgerEntry.EXTERNAL_ACCOUNT);
         assertThat(debit.getAccountIban()).isEqualTo(source.getIban());
@@ -228,6 +231,8 @@ public class LedgerPostingIntegrationTest extends AbstractTestContainers {
     void withdrawShouldNotWriteAnythingWhenBalanceIsInsufficient() {
         // given
         Account source = createAccountPort.execute("receiver@gmail.com", new BigDecimal("100"));
+        long movementsBefore = movementRepository.count();
+        long entriesBefore = ledgerEntryRepository.count();
 
         // when / then
         assertThatThrownBy(() -> withdrawPort.withdraw(
@@ -236,8 +241,8 @@ public class LedgerPostingIntegrationTest extends AbstractTestContainers {
                 .hasMessageContaining("Insufficient balance");
 
         assertThat(transactionRepository.count()).isZero();
-        assertThat(movementRepository.count()).isZero();
-        assertThat(ledgerEntryRepository.count()).isZero();
+        assertThat(movementRepository.count()).isEqualTo(movementsBefore);
+        assertThat(ledgerEntryRepository.count()).isEqualTo(entriesBefore);
         assertThat(accountRepository.findByIban(source.getIban()).orElseThrow().getBalance())
                 .isEqualByComparingTo("100");
     }
@@ -247,20 +252,19 @@ public class LedgerPostingIntegrationTest extends AbstractTestContainers {
     void adminDepositShouldProduceMovementAndEntries() {
         // given
         Account target = createAccountPort.execute("receiver@gmail.com", new BigDecimal("100"));
+        Set<Long> movementsBefore = movementIds();
 
         // when
         depositPort.adminDeposit(target.getIban(), new BigDecimal("50"));
 
         // then
         assertThat(transactionRepository.count()).isEqualTo(1);
-        assertThat(movementRepository.count()).isEqualTo(1);
-
-        MovementEntity movement = movementRepository.findAll().getFirst();
+        MovementEntity movement = newMovementSince(movementsBefore);
         assertThat(movement.getType()).isEqualTo(MovementType.DEPOSIT);
         assertThat(movement.getSourceIban()).isNull();
         assertThat(movement.getTargetIban()).isEqualTo(target.getIban());
 
-        List<LedgerEntry> entries = ledgerEntryRepository.findAll().stream()
+        List<LedgerEntry> entries = entriesOf(movement.getId()).stream()
                 .map(ledgerEntryMapper::toDomain)
                 .toList();
 
@@ -276,8 +280,6 @@ public class LedgerPostingIntegrationTest extends AbstractTestContainers {
         assertThat(debit.getAccountIban()).isEqualTo(LedgerEntry.EXTERNAL_ACCOUNT);
         assertThat(credit.getAccountIban()).isEqualTo(target.getIban());
         assertThat(debit.getAmount()).isEqualByComparingTo("50");
-        assertThat(debit.getMovementId()).isEqualTo(movement.getId());
-        assertThat(credit.getMovementId()).isEqualTo(movement.getId());
         assertThat(accountRepository.findByIban(target.getIban()).orElseThrow().getBalance())
                 .isEqualByComparingTo("150");
     }
@@ -287,20 +289,19 @@ public class LedgerPostingIntegrationTest extends AbstractTestContainers {
     void adminWithdrawShouldProduceMovementAndEntries() {
         // given
         Account source = createAccountPort.execute("receiver@gmail.com", new BigDecimal("100"));
+        Set<Long> movementsBefore = movementIds();
 
         // when
         withdrawPort.adminWithdraw(source.getIban(), new BigDecimal("40"));
 
         // then
         assertThat(transactionRepository.count()).isEqualTo(1);
-        assertThat(movementRepository.count()).isEqualTo(1);
-
-        MovementEntity movement = movementRepository.findAll().getFirst();
+        MovementEntity movement = newMovementSince(movementsBefore);
         assertThat(movement.getType()).isEqualTo(MovementType.WITHDRAWAL);
         assertThat(movement.getSourceIban()).isEqualTo(source.getIban());
         assertThat(movement.getTargetIban()).isNull();
 
-        List<LedgerEntry> entries = ledgerEntryRepository.findAll().stream()
+        List<LedgerEntry> entries = entriesOf(movement.getId()).stream()
                 .map(ledgerEntryMapper::toDomain)
                 .toList();
 
@@ -316,9 +317,27 @@ public class LedgerPostingIntegrationTest extends AbstractTestContainers {
         assertThat(debit.getAccountIban()).isEqualTo(source.getIban());
         assertThat(credit.getAccountIban()).isEqualTo(LedgerEntry.EXTERNAL_ACCOUNT);
         assertThat(debit.getAmount()).isEqualByComparingTo("40");
-        assertThat(debit.getMovementId()).isEqualTo(movement.getId());
-        assertThat(credit.getMovementId()).isEqualTo(movement.getId());
         assertThat(accountRepository.findByIban(source.getIban()).orElseThrow().getBalance())
                 .isEqualByComparingTo("60");
+    }
+
+    private Set<Long> movementIds() {
+        return movementRepository.findAll().stream()
+                .map(MovementEntity::getId)
+                .collect(Collectors.toSet());
+    }
+
+    private MovementEntity newMovementSince(Set<Long> idsBefore) {
+        List<MovementEntity> created = movementRepository.findAll().stream()
+                .filter(m -> !idsBefore.contains(m.getId()))
+                .toList();
+        assertThat(created).hasSize(1);
+        return created.getFirst();
+    }
+
+    private List<LedgerEntryEntity> entriesOf(long movementId) {
+        return ledgerEntryRepository.findAll().stream()
+                .filter(e -> e.getMovementId() != null && e.getMovementId() == movementId)
+                .toList();
     }
 }

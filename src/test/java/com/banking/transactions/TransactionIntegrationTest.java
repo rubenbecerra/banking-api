@@ -1008,6 +1008,8 @@ public class TransactionIntegrationTest extends AbstractTestContainers {
         String token = jwtUtil.generateTestToken(email, List.of("ROLE_USER"));
         Account account = createAccountPort.execute(email, BigDecimal.valueOf(10));
         String key = java.util.UUID.randomUUID().toString();
+        // Opening balance is ledger-backed: measure the withdrawal as a delta.
+        long movementsBefore = springDataMovementRepository.count();
 
         assertThatThrownBy(() -> restClient.post()
                 .uri("/api/v1/transactions/withdraw")
@@ -1034,7 +1036,7 @@ public class TransactionIntegrationTest extends AbstractTestContainers {
         assertThat(accountRepository.findByIban(account.getIban()).orElseThrow().getBalance())
                 .isEqualByComparingTo(BigDecimal.valueOf(5));
         assertThat(transactionRepository.findAll()).hasSize(1);
-        assertThat(springDataMovementRepository.count()).isEqualTo(1);
+        assertThat(springDataMovementRepository.count()).isEqualTo(movementsBefore + 1);
     }
 
     @Test
