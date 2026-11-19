@@ -105,6 +105,30 @@ class OutboxRelayIntegrationTest extends AbstractTestContainers {
         assertThat(publisher.publishCount()).isZero();
     }
 
+    @Test
+    @DisplayName("delivery is at-least-once: a lost ACK republishes the same event")
+    void lostAckRepublishesTheSameEvent() {
+        OutboxEvent event = seedEvent(T0);
+        publisher.deliverThenFailFor(event.id());
+
+        // The broker stored it, but the relay could not mark it as published.
+        int firstPass = relayAt(T0).relayOnce(10);
+
+        assertThat(firstPass).isZero();
+        assertThat(rows.findById(event.id()).orElseThrow().getPublishedAt()).isNull();
+
+        // The ACK loss is transient: the next pass publishes it again.
+        publisher.stopFailing();
+        int secondPass = relayAt(T0.plusSeconds(31)).relayOnce(10);
+
+        assertThat(secondPass).isEqualTo(1);
+        // The same id travels twice on purpose. Consumers deduplicate by
+        // outbox id; the relay cannot promise exactly-once delivery.
+        assertThat(publisher.publishedEvents())
+                .extracting(OutboxEvent::id)
+                .containsExactly(event.id(), event.id());
+    }
+
     private OutboxRelay relayAt(Instant instant) {
         return new OutboxRelay(repository, publisher,
                 Clock.fixed(instant, ZoneId.systemDefault()), LEASE);

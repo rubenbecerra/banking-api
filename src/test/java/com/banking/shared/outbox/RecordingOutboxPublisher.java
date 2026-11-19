@@ -13,12 +13,14 @@ import java.util.concurrent.CopyOnWriteArrayList;
  *
  * Records what was published and can be told to fail, either for one event id
  * or for everything, so the relay's retry behaviour can be exercised without a
- * real broker.
+ * real broker. {@link #deliverThenFailFor(long)} models the worst case: the
+ * broker DID accept the message, but the relay never learns it (lost ACK).
  */
 class RecordingOutboxPublisher implements OutboxPublisher {
 
     private final List<OutboxEvent> published = new CopyOnWriteArrayList<>();
     private final Set<Long> failingIds = ConcurrentHashMap.newKeySet();
+    private final Set<Long> ackLostIds = ConcurrentHashMap.newKeySet();
     private volatile boolean failEverything;
 
     @Override
@@ -27,14 +29,23 @@ class RecordingOutboxPublisher implements OutboxPublisher {
             throw new IllegalStateException("Broker unavailable");
         }
         published.add(event);
+        if (ackLostIds.contains(event.id())) {
+            throw new IllegalStateException("ACK lost after delivery");
+        }
     }
 
     void failFor(long eventId) {
         failingIds.add(eventId);
     }
 
+    /** The broker stores the event and then the acknowledgement is lost. */
+    void deliverThenFailFor(long eventId) {
+        ackLostIds.add(eventId);
+    }
+
     void stopFailing() {
         failingIds.clear();
+        ackLostIds.clear();
         failEverything = false;
     }
 
