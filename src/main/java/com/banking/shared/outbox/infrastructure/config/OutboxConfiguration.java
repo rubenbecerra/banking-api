@@ -14,11 +14,6 @@ import java.time.Duration;
 public class OutboxConfiguration {
 
     @Bean
-    public Clock clock() {
-        return Clock.systemDefaultZone();
-    }
-
-    @Bean
     public OutboxRelay outboxRelay(OutboxEventRepository repository,
                                    OutboxPublisher publisher,
                                    Clock clock,

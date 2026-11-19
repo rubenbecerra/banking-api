@@ -9,5 +9,10 @@ public interface IdempotencyKeyRepository {
     IdempotencyKey insert(IdempotencyKey key);
     Optional<IdempotencyKey> find(String principal, String scope, String idempotencyKey);
     void complete(Long id, String responseBody, LocalDateTime completedAt);
-    int deleteExpired();
+    /**
+     * Deletes keys whose retention window is over: expiresAt strictly before
+     * the given cutoff. The caller passes the cutoff (application clock) so
+     * the adapter can be tested with fixed instants.
+     */
+    int deleteExpiredBefore(LocalDateTime cutoff);
 }

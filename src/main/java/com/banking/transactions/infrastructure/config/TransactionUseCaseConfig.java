@@ -17,14 +17,17 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import java.time.Clock;
+
 @Configuration
 public class TransactionUseCaseConfig {
 
     @Bean
     public IdempotencyTemplate idempotencyTemplate(IdempotencyKeyRepository idempotencyKeyRepository,
                                                    ObjectMapper objectMapper,
-                                                   TransactionTemplate transactionTemplate) {
-        return new IdempotencyTemplate(idempotencyKeyRepository, objectMapper, transactionTemplate);
+                                                   TransactionTemplate transactionTemplate,
+                                                   Clock clock) {
+        return new IdempotencyTemplate(idempotencyKeyRepository, objectMapper, transactionTemplate, clock);
     }
 
     @Bean

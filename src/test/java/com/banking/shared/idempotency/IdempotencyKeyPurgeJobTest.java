@@ -1,12 +1,15 @@
 package com.banking.shared.idempotency;
 
 import com.banking.customer.AbstractTestContainers;
-import com.banking.shared.idempotency.application.IdempotencyKeyPurgeJob;
+import com.banking.shared.idempotency.infrastructure.scheduling.IdempotencyKeyPurgeJob;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
+
+import java.sql.Timestamp;
+import java.time.LocalDateTime;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -26,11 +29,15 @@ class IdempotencyKeyPurgeJobTest extends AbstractTestContainers {
     @Test
     @DisplayName("Purges expired keys and keeps fresh ones")
     void purgesOnlyExpiredKeys() {
-        insertKey("expired-key", "CURRENT_TIMESTAMP - INTERVAL '1 hour'");
-        insertKey("fresh-key", "CURRENT_TIMESTAMP + INTERVAL '1 hour'");
+        // The job compares with the application clock, so the fixture uses the
+        // same clock instead of the database one.
+        LocalDateTime now = LocalDateTime.now();
+        insertKey("expired-key", now.minusHours(1));
+        insertKey("fresh-key", now.plusHours(1));
 
-        job.purgeExpired();
+        int deleted = job.purgeExpired();
 
+        assertThat(deleted).isEqualTo(1);
         assertThat(countKeys()).isEqualTo(1);
         assertThat(jdbcTemplate.queryForObject(
                 "SELECT idempotency_key FROM idempotency_keys", String.class))
@@ -40,21 +47,25 @@ class IdempotencyKeyPurgeJobTest extends AbstractTestContainers {
     @Test
     @DisplayName("Running the purge twice is harmless")
     void purgeIsIdempotent() {
-        insertKey("expired-key", "CURRENT_TIMESTAMP - INTERVAL '1 hour'");
+        insertKey("expired-key", LocalDateTime.now().minusHours(1));
 
         job.purgeExpired();
-        job.purgeExpired();
+        int second = job.purgeExpired();
 
+        assertThat(second).isZero();
         assertThat(countKeys()).isZero();
     }
 
-    private void insertKey(String key, String expiresAtExpression) {
+    private void insertKey(String key, LocalDateTime expiresAt) {
+        // created_at is not compared by the purge; it stays 24 h before the
+        // expiry so the row looks like a real one.
         jdbcTemplate.update("""
                 INSERT INTO idempotency_keys
                     (principal, scope, idempotency_key, status, request_fingerprint, created_at, expires_at)
-                VALUES (?, ?, ?, 'COMPLETED', ?, CURRENT_TIMESTAMP, %s)
-                """.formatted(expiresAtExpression),
-                "purge-test@bank.com", "deposit", key, "fingerprint");
+                VALUES (?, ?, ?, 'COMPLETED', ?, ?, ?)
+                """,
+                "purge-test@bank.com", "deposit", key, "fingerprint",
+                Timestamp.valueOf(expiresAt.minusHours(24)), Timestamp.valueOf(expiresAt));
     }
 
     private int countKeys() {

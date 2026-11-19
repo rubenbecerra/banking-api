@@ -6,6 +6,7 @@ import com.banking.shared.idempotency.domain.model.IdempotencyStatus;
 import com.banking.shared.idempotency.domain.repository.IdempotencyKeyRepository;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.sql.SQLException;
 import java.time.LocalDateTime;
@@ -67,8 +68,9 @@ public class IdempotencyKeyRepositoryAdapter implements IdempotencyKeyRepository
     }
 
     @Override
-    public int deleteExpired() {
-        return repo.deleteExpired();
+    @Transactional
+    public int deleteExpiredBefore(LocalDateTime cutoff) {
+        return repo.deleteExpiredBefore(cutoff);
     }
 
     

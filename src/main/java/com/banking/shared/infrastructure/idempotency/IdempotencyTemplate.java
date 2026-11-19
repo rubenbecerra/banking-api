@@ -15,6 +15,7 @@ import org.springframework.web.server.ResponseStatusException;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.HexFormat;
 import java.util.function.Supplier;
@@ -36,13 +37,16 @@ public class IdempotencyTemplate {
     private final IdempotencyKeyRepository repository;
     private final ObjectMapper objectMapper;
     private final TransactionTemplate transactionTemplate;
+    private final Clock clock;
 
     public IdempotencyTemplate(IdempotencyKeyRepository repository,
                                ObjectMapper objectMapper,
-                               TransactionTemplate transactionTemplate) {
+                               TransactionTemplate transactionTemplate,
+                               Clock clock) {
         this.repository = repository;
         this.objectMapper = objectMapper;
         this.transactionTemplate = transactionTemplate;
+        this.clock = clock;
     }
 
     public <T> OperationResult<T> execute(String scope,
@@ -60,7 +64,7 @@ public class IdempotencyTemplate {
         String user = IdempotencyContextHolder.getCurrentUser();
         String principal = (user == null || user.isBlank()) ? "anonymous" : user;
         String requestFingerprint = sha256(fingerprint);
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = LocalDateTime.now(clock);
 
         try {
             return transactionTemplate.execute(status -> {
@@ -79,7 +83,7 @@ public class IdempotencyTemplate {
 
                 OperationResult<T> result = action.get();
 
-                repository.complete(inserted.id(), toJson(result.data()), LocalDateTime.now());
+                repository.complete(inserted.id(), toJson(result.data()), LocalDateTime.now(clock));
 
                 return result;
             });
