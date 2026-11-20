@@ -1,0 +1,11 @@
+# Terraform working files
+.terraform/
+*.tfstate
+*.tfstate.*
+tfplan
+*.tfplan
+generated/
+
+# Local overrides (never commit credentials)
+*.auto.tfvars
+crash.log
